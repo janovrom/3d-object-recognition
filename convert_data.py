@@ -10,6 +10,7 @@ from numba import float32, int32
 from numba import jit, cuda
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import data_loader as dl
 
 
 
@@ -81,8 +82,10 @@ def getAABB(points):
 
     return mins, maxs
 
+
 def dot2(v):
     return np.dot(v,v)
+
 
 def udTriangle(p, a, b, c):
     ba = b - a
@@ -109,55 +112,68 @@ def orient2d(a, b, c):
 def points2Occ(tris, mins, maxs, pad, occ_out):
     voxel_size = (maxs - mins)/occ_out.shape
     grid_size = maxs - mins
+    size = list(occ_out.shape)
+    size[0] -= 1
+    size[1] -= 1
+    size[2] -= 1
     for i in range(0,tris.shape[1], 3):
         # compute aabb of triangle
         t = tris[:, i:i+3]
+
+        # normal = np.cross(t[:,1] - t[:,0], t[:,2] - t[:,0])
+        # if normal[2] <= 0:
+        #     continue
+
         t_min = np.min(t, axis=1) - mins
         t_max = np.max(t, axis=1) - mins
-        t_min = ((t_min) * occ_out.shape / grid_size).astype(int)
-        t_max = ((t_max) * occ_out.shape / grid_size).astype(int)
-
+        # compute absolute position in the grid
+        t_min = ((t_min * size) / grid_size).astype(int)
+        t_max = ((t_max) * size / grid_size).astype(int) + 1
         for i in range(t_min[0], t_max[0]):
             for j in range(t_min[1], t_max[1]):
-                p = (np.array([i, j]) + 0.5) * voxel_size[0:2] + mins[0:2]
-                # Determine barycentric coordinates
-                w0 = orient2d(t[:,1], t[:,2], p)
-                w1 = orient2d(t[:,2], t[:,0], p)
-                w2 = orient2d(t[:,0], t[:,1], p)
+                for k in range(t_min[2], t_max[2]):
+                    p = (np.array([i, j, k])) * voxel_size + mins
+                    if udTriangle(p, t[:,0], t[:,1], t[:,2]) < voxel_size[0]:
+                        occ_out[i,j,k] = 1
+                # # add min to transform to object space
+                # p = (np.array([i, j, t_max[2]])) * voxel_size + mins
+                # # Determine point orientations
+                # w0 = orient2d(t[:,1], t[:,2], p)
+                # w1 = orient2d(t[:,2], t[:,0], p)
+                # w2 = orient2d(t[:,0], t[:,1], p)
 
-                # If p is on or inside all edges, render pixel.
-                if (w0 >= 0 and w1 >= 0 and w2 >= 0):
-                    z = t[2,0] * w0 + t[2,1] * w1 + t[2,2] * w2
-                    k = int((z - mins[2]) * occ_out.shape[2] / grid_size[2])
-                    occ_out[i,j,k] = 1
+                # # If p is on or inside all edges, render pixel.
+                # if (w0 >= 0 and w1 >= 0 and w2 >= 0):
+                #     # compute z in object space in aabb
+                #     p[2] = maxs[2]
+                #     z = udTriangle(p, t[:,0], t[:,1], t[:,2])
+                #     k = int((maxs[2] - mins[2] - z) * size[2] / grid_size[2])
+                #     occ_out[i,j,k] = 1
          
+def main():
+    nps = dl.load_off_file("./3d-object-recognition/objects/off/torus.off")
+    nps = rotatePoints(nps, eulerToMatrix([45,45,45]))
+    mins, maxs = getAABB(nps)
+    occ_out = np.zeros((30,30,30))
+    pad = np.zeros((30))
+    points2Occ(nps, mins, maxs, pad, occ_out)
 
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
 
-ps = [
-    [0, 1, 0.5],
-    [0, 0, 1],
-    [0, 0, 1]
-]
-nps = np.array(ps)
-mins, maxs = getAABB(nps)
-occ_out = np.zeros((30,30,30))
-pad = np.zeros((30))
-points2Occ(nps, mins, maxs, pad, occ_out)
+    print(np.sum(occ_out))
+    axis = np.nonzero(occ_out)
+    print(len(axis))
+    xs = axis[0]
+    ys = axis[1]
+    zs = axis[2]
+    ax.scatter(xs, ys, zs, c='r', marker='s')
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+    ax.set_xlim3d(0, 30)
+    ax.set_ylim3d(0, 30)
+    ax.set_zlim3d(0, 30)
 
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-
-print(np.sum(occ_out))
-axis = np.nonzero(occ_out)
-print(len(axis))
-xs = axis[0]
-ys = axis[1]
-zs = axis[2]
-ax.scatter(xs, ys, zs, c='r', marker='s')
-
-ax.set_xlabel('X Label')
-ax.set_ylabel('Y Label')
-ax.set_zlabel('Z Label')
-
-plt.show()
+    plt.show()
 
