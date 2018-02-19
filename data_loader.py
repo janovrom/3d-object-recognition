@@ -54,6 +54,7 @@ def load_off_file_to_mesh(filename):
     mesh = {}
     points = []
     vertices = []
+    indices = []
 
     header_size = 2
 
@@ -72,12 +73,15 @@ def load_off_file_to_mesh(filename):
             idx2 = int(splitted[2])
             idx3 = int(splitted[3])
 
-            vertices.extend(points[idx1*3:idx1*3+3])
-            vertices.extend(points[idx2*3:idx2*3+3])
-            vertices.extend(points[idx3*3:idx3*3+3])
+            indices.append([idx1, idx2, idx3])
 
+            vertices.append(points[idx1*3:idx1*3+3])
+            vertices.append(points[idx2*3:idx2*3+3])
+            vertices.append(points[idx3*3:idx3*3+3])
 
-    mesh["vertices"] = vertices
-    mesh["numVertices"] = numFaces * 3
+    print(np.array(vertices).shape)
+    print(np.array(indices).shape)
+    mesh["vertices"] = np.array(vertices)
+    mesh["indices"] = np.array(indices)
 
     return mesh

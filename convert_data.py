@@ -11,6 +11,7 @@ from numba import jit, cuda
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import data_loader as dl
+from triangle_test import * 
 
 
 
@@ -112,13 +113,13 @@ def orient2d(a, b, c):
 def points2Occ(tris, mins, maxs, pad, occ_out):
     voxel_size = (maxs - mins)/occ_out.shape
     grid_size = maxs - mins
-    size = list(occ_out.shape)
-    size[0] -= 1
-    size[1] -= 1
-    size[2] -= 1
+    size = np.array(list(occ_out.shape))
+    box_half_size = voxel_size / 2.0 + 0.01
+
     for i in range(0,tris.shape[1], 3):
         # compute aabb of triangle
         t = tris[:, i:i+3]
+        t = np.transpose(t)
 
         # normal = np.cross(t[:,1] - t[:,0], t[:,2] - t[:,0])
         # if normal[2] <= 0:
@@ -127,13 +128,13 @@ def points2Occ(tris, mins, maxs, pad, occ_out):
         t_min = np.min(t, axis=1) - mins
         t_max = np.max(t, axis=1) - mins
         # compute absolute position in the grid
-        t_min = ((t_min * size) / grid_size).astype(int)
-        t_max = ((t_max) * size / grid_size).astype(int) + 1
+        t_min = (t_min * (size - 1) / grid_size).astype(int)
+        t_max = (t_max * (size - 1) / grid_size).astype(int) + 1
         for i in range(t_min[0], t_max[0]):
             for j in range(t_min[1], t_max[1]):
                 for k in range(t_min[2], t_max[2]):
-                    p = (np.array([i, j, k])) * voxel_size + mins
-                    if udTriangle(p, t[:,0], t[:,1], t[:,2]) < voxel_size[0]:
+                    center = (np.array([i, j, k]) + 0.5) * voxel_size + mins
+                    if intersects_box(t, center, box_half_size):
                         occ_out[i,j,k] = 1
                 # # add min to transform to object space
                 # p = (np.array([i, j, t_max[2]])) * voxel_size + mins
@@ -151,8 +152,8 @@ def points2Occ(tris, mins, maxs, pad, occ_out):
                 #     occ_out[i,j,k] = 1
          
 def main():
-    nps = dl.load_off_file("./3d-object-recognition/objects/off/torus.off")
-    nps = rotatePoints(nps, eulerToMatrix([45,45,45]))
+    nps = dl.load_off_file("./3d-object-recognition/objects/off/cube.off")
+    # nps = rotatePoints(nps, eulerToMatrix([45,45,45]))
     mins, maxs = getAABB(nps)
     occ_out = np.zeros((30,30,30))
     pad = np.zeros((30))
@@ -177,3 +178,37 @@ def main():
 
     plt.show()
 
+# main()
+
+x = np.array([0,1,2,3,4,5,6,7,8])
+y = np.array([8,7,6,5,4,3,2,1,0])
+
+z = np.array([x,y])
+print(z.shape)
+
+import octree as octree
+
+tris = dl.load_off_file("./3d-object-recognition/objects/off/cone.off")
+mins, maxs = getAABB(tris)
+tris = np.transpose(tris)
+tree = octree.Octree(tris, mins, maxs)
+
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+X = np.array(tree.get_occlussion())
+print(X.shape)
+
+xs = X[:,0]
+ys = X[:,1]
+zs = X[:,2]
+ax.scatter(xs, ys, zs, c='r', marker='s')
+ax.set_xlabel('X Label')
+ax.set_ylabel('Y Label')
+ax.set_zlabel('Z Label')
+ax.set_xlim3d(-1, 1)
+ax.set_ylim3d(-1, 1)
+ax.set_zlim3d(-1, 1)
+
+plt.show()
