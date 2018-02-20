@@ -50,7 +50,7 @@ class Octree():
 
 
     def recursive_tree(self, node, tris, min_e, max_e, level):
-        if level == 6:
+        if level == 6 or tris.shape[0] < 2:
             node.mark_as_leaf(tris)
             if tris.shape[0] > 0:
                 X.append(min_e + (max_e - min_e) / 2.0)
@@ -72,6 +72,7 @@ class Octree():
             
             children[i]["min_e"] = min_e + box_size * Octree.triplets[i,:]
             children[i]["max_e"] = children[i]["min_e"] + box_size
+
 
         for i in range(0, tris.shape[0], 3):
             t = tris[i:i+3,:]

@@ -1,5 +1,7 @@
+import octree as octree
 import random
-import threading
+from multiprocessing import Pool
+from functools import partial
 import os
 import math
 import numpy as np
@@ -178,37 +180,143 @@ def main():
 
     plt.show()
 
-# main()
 
-x = np.array([0,1,2,3,4,5,6,7,8])
-y = np.array([8,7,6,5,4,3,2,1,0])
-
-z = np.array([x,y])
-print(z.shape)
-
-import octree as octree
-
-tris = dl.load_off_file("./3d-object-recognition/objects/off/cone.off")
-mins, maxs = getAABB(tris)
-tris = np.transpose(tris)
-tree = octree.Octree(tris, mins, maxs)
+def exists_and_create(datapath):
+    if not os.path.exists(datapath):
+        os.mkdir(datapath)
+        os.chmod(datapath, 0o777)
 
 
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
+def create_set(filename, outpath, inpath):
+    print("Creating set for: " + filename)
 
-X = np.array(tree.get_occlussion())
-print(X.shape)
+    rots = []
 
-xs = X[:,0]
-ys = X[:,1]
-zs = X[:,2]
-ax.scatter(xs, ys, zs, c='r', marker='s')
-ax.set_xlabel('X Label')
-ax.set_ylabel('Y Label')
-ax.set_zlabel('Z Label')
-ax.set_xlim3d(-1, 1)
-ax.set_ylim3d(-1, 1)
-ax.set_zlim3d(-1, 1)
+    for xrot in range(-80, 81, 20):
+        for yrot in range(0, 360, 2):
+            rots.append([xrot, yrot])
+    
+    rots = np.array(rots)
+    indices = np.random.permutation(len(rots))
+    # print(indices[0:len(rots)-200])
 
-plt.show()
+    rots_train = rots[indices[0:len(rots)-200]]
+    rots_test = rots[indices[len(rots)-200:len(rots)-100]]
+    rots_dev = rots[indices[len(rots)-100:len(rots)]]
+
+    def create(set_name, rotations):
+        idx = 0
+        triangles = dl.load_off_file(os.path.join(inpath, filename))
+        data_filename = filename.split(".")[0]
+        for rot in rotations:
+            xrot, yrot = rot
+            tris = np.copy(triangles)
+            tris = rotatePoints(tris, eulerToMatrix([0,yrot,0]))
+            tris = rotatePoints(tris, eulerToMatrix([xrot,0,0]))
+            mins, maxs = getAABB(tris)
+            tris = np.transpose(tris)
+            tree = octree.Octree(tris, mins, maxs)
+            X = np.array(tree.get_occlussion())
+            # hash it to the regular grid
+            # mins, maxs = getAABB(X)
+            X = 31 * (X - mins) / (maxs - mins)
+            X = X.astype(int)
+            occ_grid = np.zeros((32,32,32), dtype=np.int)
+            for i in range(0, X.shape[0]):
+                x, y, z = X[i,:]
+                occ_grid[x,y,z] = 1
+
+            name = os.path.join(outpath, set_name, data_filename + "_%d" % idx)
+            with open(name, "wb") as f:
+                np.save(f, occ_grid) 
+            idx = idx + 1
+
+    create("train", rots_train)
+    create("test", rots_test)
+    create("dev", rots_dev)
+        
+
+
+def create_dataset():
+    train_path = "./3d-object-recognition/data/train"
+    test_path = "./3d-object-recognition/data/test"
+    dev_path = "./3d-object-recognition/data/dev"
+    outpath = "./3d-object-recognition/data/"
+    inpath = "./3d-object-recognition/objects/off"
+    exists_and_create(outpath)
+    exists_and_create(train_path)
+    exists_and_create(test_path)
+    exists_and_create(dev_path)
+
+    p = Pool(5)
+
+    p.map(partial(create_set, outpath=outpath,inpath=inpath), [
+        "cube.off",
+        "cone.off",
+        "torus.off",
+        "sphere.off",
+        "cylinder.off"])
+
+    p.close()
+    p.join()
+
+
+
+
+if __name__ == '__main__':
+    create_dataset()
+
+    # sanity check on saved data
+    # train_path = "./3d-object-recognition/data/train/cube_0"
+    # f = open(train_path, "rb")
+    # occ = np.load(f)
+    # xs = []
+    # ys = []
+    # zs = []
+    # for i in range(0, 32):
+    #     for j in range(0, 32):
+    #         for k in range(0, 32):
+    #             if occ[i,j,k] == 1:
+    #                 xs.append(i)
+    #                 ys.append(j)
+    #                 zs.append(k)
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    # ax.scatter(xs=xs, ys=ys, zs=zs, c=[0.1,0.1,0.1,0.2], marker='o')
+    # ax.set_xlabel('X Label')
+    # ax.set_ylabel('Y Label')
+    # ax.set_zlabel('Z Label')
+    # ax.set_xlim3d(0, 32)
+    # ax.set_ylim3d(0, 32)
+    # ax.set_zlim3d(0, 32)
+
+    # plt.show()     
+
+    # # sanity check on rotations
+    # tris = dl.load_off_file("./3d-object-recognition/objects/off/cone.off")
+    # tris = rotatePoints(tris, eulerToMatrix([0,80,0]))
+    # tris = rotatePoints(tris, eulerToMatrix([40,0,0]))
+    # mins, maxs = getAABB(tris)
+    # tris = np.transpose(tris)
+    # tree = octree.Octree(tris, mins, maxs)
+
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+
+    # X = np.array(tree.get_occlussion())
+    # # print(X.shape)
+
+    # xs = X[:,0]
+    # ys = X[:,1]
+    # zs = X[:,2]
+    # ax.scatter(xs, ys, zs, c='r', marker='s')
+    # ax.set_xlabel('X Label')
+    # ax.set_ylabel('Y Label')
+    # ax.set_zlabel('Z Label')
+    # ax.set_xlim3d(-1, 1)
+    # ax.set_ylim3d(-1, 1)
+    # ax.set_zlim3d(-1, 1)
+
+    # plt.show()

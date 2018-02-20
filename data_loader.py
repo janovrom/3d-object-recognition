@@ -4,7 +4,6 @@ import numpy as np
 def load_off_file(filename):
     f = open(filename, "r")
     lines = f.readlines()
-    print(lines[0])
     assert(lines[0] == "OFF\n")
     splitted = lines[1].split(" ")
     numVertices = int(splitted[0])
