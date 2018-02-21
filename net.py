@@ -1,0 +1,177 @@
+import tensorflow as tf 
+import numpy as np 
+import json
+import os
+
+
+class Net3D():
+
+    def create_placeholders(self, n_H0, n_W0, n_C0, n_y):
+        '''
+        Creates input placeholders for labels, input and descriptor matrix. 
+
+        Arguments:
+            n_H0 -- scalar, height of input image
+            n_W0 -- scalar, width of input image 
+            n_C0 -- scalar, number of channels, ie. 3 for RGB
+            n_y -- scalar, number of labels
+        Returns:
+            X -- placeholder for data input, shape (None, n_H0, n_W0, n_C0, 1)
+            Y -- placeholder for label input, shape (None, n_y)
+        '''
+
+        with tf.name_scope("input_placeholders"):
+            X = tf.placeholder(dtype=tf.float32, shape=(None, n_H0, n_W0, n_C0, 1), name="input_voxel")
+            Y = tf.placeholder(dtype=tf.float32, shape=(None, n_y), name="input_label")
+            keep_prob = tf.placeholder(dtype=tf.float32, name="keep_probability")
+
+        return X, Y
+
+    
+    def forward_propagation(self, X, keep_prob, path):
+        '''
+        Initializes filter weights and biases. 
+
+        IN > classify using softmax
+        
+        Arguments:
+            X -- input dataset placeholder of shape (number of examples, input size)
+            keep_prob -- placeholder, keep probability for dropout
+            path -- string, path to json file with network description
+
+        Returns:
+            Z -- last layer before softmax
+        '''
+
+        with open(path, "r") as f:
+            layers = json.load(f)["layers"]
+
+            Z = X
+            with tf.name_scope("model"):
+                for l in layers:
+                    with tf.variable_scope(l["name"]) as scope:
+                        shape = l["filter"]
+                        W = tf.get_variable("weights", shape, initializer=tf.contrib.layers.xavier_initializer(), regularizer=tf.contrib.layers.l2_regularizer(self.l2_reg_w), dtype=tf.float32)
+                        b = tf.get_variable("bias", [shape[-1]], initializer=tf.zeros_initializer(), regularizer=tf.contrib.layers.l2_regularizer(self.l2_reg_b), dtype=tf.float32)
+                        tf.summary.histogram(l["name"]+":weights", W)
+                        tf.summary.histogram(l["name"]+":biases", b)
+                        s = l["stride"]
+                        p = "VALID"
+                        if "padding" in l:
+                            p = l["padding"].upper()
+
+                        Z = tf.nn.conv3d(Z, W, strides=s, padding=p)
+                        Z = Z + b
+                        if "activation" in l and l["activation"].lower() == "relu":
+                            Z = tf.nn.relu(Z + b)
+                        elif "activation" in l:
+                            raise "Wrong activation provided"
+
+                        if "dropout" in l:
+                            Z = tf.nn.dropout(Z, keep_prob)
+                        if "maxpool" in l:
+                            Z = tf.nn.max_pool3d(Z, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID")
+
+                Z = tf.contrib.layers.flatten(Z)
+            
+        return Z
+
+
+    def compute_cost(self, Zl, Y):
+        '''
+        Computes the cost for output and labels. 
+
+        Arguments:
+            Zl -- output of the forward propagation of shape (n_y, number of examples)
+            Y -- true labels vector placeholder, same shape as Zl
+        
+        Returns:
+            cost -- tensor of the cost function
+        '''
+
+        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=Zl, labels=Y))
+
+        return cost
+
+
+    def compute_predictions(self, Zl, Y):
+        """
+        Creates prediction. Returns label or -1 if softmax is not certain enough.
+        
+        Arguments:
+            Zl -- tensor, last flatten layer before softmax
+            Y -- label placeholder, contains one-hot vector
+
+        Returns:
+            pred_op -- tensor, prediction operator
+        """
+
+        softmax = tf.nn.softmax(logits=Zl)
+        max_prob = tf.reduce_max(softmax)
+        pred_op = tf.where(tf.greater(max_prob, tf.constant(self.min_prob)), tf.argmax(softmax), tf.constant(-1))
+        accuracy_op = tf.equal(tf.argmax(Y), pred_op)
+        tf.summary.scalar("prediction_accuracy", accuracy_op)
+        tf.summary.scalar("prediction", pred_op)
+        tf.summary.scalar("maximum_likelihood", max_prob)
+        return pred_op, accuracy_op
+
+
+    def run_model (self, dataset, print_cost=True, load=False, train=True):
+        # initialize some commonly used variables
+        log_dir = os.path.join("./3d-object-recognition", self.name)
+
+        tf.reset_default_graph()
+        m, n_H0, n_W0, n_C0 = dataset.input_shape(dataset.train)
+        n_y = dataset.num_classes
+        X, Y, keep_prob = self.create_placeholders(n_H0, n_W0, n_C0, n_y)
+        Zl = self.forward_propagation(X, keep_prob, os.path.join(log_dir, "network.json"))
+        cost = self.compute_cost(Zl, Y)
+        pred_op, accuracy_op = self.compute_predictions(Zl, Y)
+        step = tf.Variable(0, trainable=False, name="global_step")
+        lr_dec = tf.train.exponential_decay(self.lr, step, self.decay_step, self.decay_rate, staircase=True)
+        optimizer = tf.train.AdamOptimizer(learning_rate=lr_dec).minimize(cost, global_step=step)
+        init = tf.global_variables_initializer()
+
+        # create summaries
+        tf.summary.scalar("learning_rate", lr_dec)
+        tf.summary.scalar("global_step", step)
+        tf.summary.scalar("cost", cost)
+        test_writer = tf.summary.FileWriter(os.path.join(log_dir, "test"), graph=tf.get_default_graph())
+        train_writer = tf.summary.FileWriter(os.path.join(log_dir, "train"), graph=tf.get_default_graph())
+        summary_op = tf.summary.merge_all()
+
+        with tf.Session() as sess:
+            # initialize all variables before loading, so they won't be overwritten
+            sess.run(init)
+            
+            if load:
+                tf.train.Saver().restore(sess, os.path.join(log_dir, self.name + ".ckpt"))
+                print("Model loaded from file: %s" % os.path.join(log_dir, self.name + ".ckpt"))
+
+            # run the training cycle
+            if train:
+                for i in range(self.num_epochs):
+                    if i % 10 == 0:  # Record summaries and test-set accuracy
+                        summary, acc = sess.run([summary_op, accuracy_op], feed_dict={X: x, Y: y, keep_prob: 1})
+                        test_writer.add_summary(summary, i)
+                        print('Accuracy at step %s: %s' % (i, acc))
+                    
+                    summary, _ = sess.run([summary_op, optimizer], feed_dict={X: x, Y: y, keep_prob: self.keep_prob})
+                    train_writer.add_summary(summary, i)
+
+
+    def __init__(self, model_name):
+        assert os.path.exists(os.path.join("./3d-object-recognition", model_name, "network.json"))
+
+        with open(os.path.join("./3d-object-recognition", model_name, "network.json"), "r") as f:
+            jparams = json.load(f)["params"]
+            self.name = model_name
+            self.lr =           jparams["learning_rate"]
+            self.num_epochs =   jparams["num_epochs"]
+            self.n_d =          jparams["descriptor_size"]
+            self.l2_reg_w =     jparams["l2_reg_weights"]
+            self.l2_reg_b =     jparams["l2_reg_biases"] 
+            self.decay_step =   jparams["decay_step"] 
+            self.decay_rate =   jparams["decay_rate"] 
+            self.min_prob =     jparams["min_prob"] 
+            self.keep_prob =    jparams["keep_prob"] 
