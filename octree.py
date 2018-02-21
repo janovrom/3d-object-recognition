@@ -53,7 +53,7 @@ class Octree():
         if level == 6 or tris.shape[0] < 2:
             node.mark_as_leaf(tris)
             if tris.shape[0] > 0:
-                X.append(min_e + (max_e - min_e) / 2.0)
+                X.append(min_e)
             return
 
 

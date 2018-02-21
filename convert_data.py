@@ -218,7 +218,7 @@ def create_set(filename, outpath, inpath):
             tree = octree.Octree(tris, mins, maxs)
             X = np.array(tree.get_occlussion())
             # hash it to the regular grid
-            # mins, maxs = getAABB(X)
+            mins, maxs = getAABB(np.transpose(X))
             X = 31 * (X - mins) / (maxs - mins)
             X = X.astype(int)
             occ_grid = np.zeros((32,32,32), dtype=np.int)
