@@ -43,8 +43,9 @@ class Net3D():
 
         Returns:
             Z -- last layer before softmax
+            activations -- dictionary, contains names as keys and tensors of activation layers as values
         '''
-
+        activations = {}
         with open(path, "r") as f:
             layers = json.load(f)["layers"]
 
@@ -70,15 +71,18 @@ class Net3D():
                             pass
                         else:
                             raise "Wrong activation provided"
+                        # add layer after activation    
+                        activations[l["name"] + "/activations"] = Z
 
                         if "dropout" in l:
                             Z = tf.nn.dropout(Z, keep_prob)
                         if "maxpool" in l:
                             Z = tf.nn.max_pool3d(Z, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID")
 
+
                 Z = tf.contrib.layers.flatten(Z)
             
-        return Z
+        return Z, activations
 
 
     def compute_cost(self, Zl, Y):
@@ -116,7 +120,7 @@ class Net3D():
         arg_max_prob = tf.argmax(softmax, axis=1)
         pred_op = tf.where(cond, arg_max_prob, (-1) * tf.ones(tf.shape(arg_max_prob), dtype=tf.int64))
         accuracy_op = tf.equal(arg_max_prob, pred_op)
-        accuracy_op = tf.reduce_sum(tf.cast(accuracy_op, tf.float32))
+        accuracy_op = tf.reduce_sum(tf.cast(accuracy_op, tf.int32))
         return pred_op, accuracy_op
 
 
@@ -128,7 +132,7 @@ class Net3D():
         m, n_H0, n_W0, n_C0 = self.dataset.input_shape(self.dataset.train)
         n_y = self.dataset.num_classes
         X, Y, keep_prob = self.create_placeholders(n_H0, n_W0, n_C0, n_y)
-        Zl = self.forward_propagation(X, keep_prob, os.path.join(log_dir, "network.json"))
+        Zl, Ws = self.forward_propagation(X, keep_prob, os.path.join(log_dir, "network.json"))
         cost = self.compute_cost(Zl, Y)
         pred_op, accuracy_op = self.compute_predictions(Zl, Y)
         step = tf.Variable(0, trainable=False, name="global_step")
@@ -193,8 +197,22 @@ class Net3D():
                         accuracy_test(self.dataset, self.dataset.train, train_writer, i, "train")
                         accuracy_test(self.dataset, self.dataset.test, test_writer, i, "test")
                         accuracy_test(self.dataset, self.dataset.dev, dev_writer, i, "dev")
-                        
-                    
+
+
+            def getActivations(layer,stimuli, label):
+                units = sess.run(layer,feed_dict={X:np.reshape(stimuli,[1,n_H0,n_W0,n_C0,1],order='F'), Y: np.reshape(label, [1,n_y]),keep_prob:1.0})
+                conv3d_plot(units)
+
+            # display activations
+            self.dataset.restart_mini_batches(self.dataset.test)
+            x,y = self.dataset.next_mini_batch(self.dataset.test)
+            y = convert_to_one_hot(y, self.dataset.num_classes)
+            # display stimuli
+            display_stimuli(x[0], x[0].shape[0])
+            with open(os.path.join(log_dir, "network.json"), "r") as f:
+                layers = json.load(f)["layers"]
+                for l in layers:
+                    getActivations(Ws[l["name"]+"/activations"], x[0], y[0])
 
 
     def __init__(self, model_name):
@@ -202,7 +220,7 @@ class Net3D():
 
         with open(os.path.join("./3d-object-recognition", model_name, "network.json"), "r") as f:
             jparams = json.load(f)["params"]
-            self.name = model_name
+            self.name =         model_name
             self.lr =           jparams["learning_rate"]
             self.num_epochs =   jparams["num_epochs"]
             self.l2_reg_w =     jparams["l2_reg_weights"]

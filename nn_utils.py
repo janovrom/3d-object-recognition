@@ -1,6 +1,67 @@
 import numpy as np 
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import os
+
+
+def display_stimuli(stimuli, size):
+    occ = stimuli
+    xs = []
+    ys = []
+    zs = []
+    for i in range(0, size):
+        for j in range(0, size):
+            for k in range(0, size):
+                if occ[i,j,k] == 1:
+                    xs.append(i)
+                    ys.append(j)
+                    zs.append(k)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(xs=xs, ys=ys, zs=zs, c=[0.1,0.1,0.1,0.2], marker='o')
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+    ax.set_xlim3d(0, size)
+    ax.set_ylim3d(0, size)
+    ax.set_zlim3d(0, size)
+
+    plt.show()     
+
+
+def conv3d_plot(filters):
+    print(filters.shape)
+    num_filters = filters.shape[-1]
+    filter_size = filters.shape[0]
+    rows = 8
+    g_x = np.ceil(num_filters / rows)
+    fig = plt.figure()
+    for i in range(0, num_filters):
+        ax = fig.add_subplot(rows, g_x, i+1, projection='3d')
+        filter = filters[0,:,:,:,i]
+        filter = filter - np.min(filter)
+        filter = filter / np.max(filter)
+        xs = []
+        ys = []
+        zs = []
+        vs = []
+        for x in range(0,filter_size):
+            for y in range(0,filter_size):
+                for z in range(0,filter_size):
+                        xs.append(x)
+                        ys.append(y)
+                        zs.append(z)
+                        vs.append(filter[x,y,z])
+        ax.scatter(xs, ys, zs, vs, cmap="magma", marker='o')
+        ax.set_xlabel('X Label')
+        ax.set_ylabel('Y Label')
+        ax.set_zlabel('Z Label')
+        ax.set_xlim3d(0, filter_size)
+        ax.set_ylim3d(0, filter_size)
+        ax.set_zlim3d(0, filter_size)
+
+    plt.show()     
 
 
 def convert_to_one_hot(labels, max_label):
@@ -56,3 +117,7 @@ def vector_to_matrix_mnist(mnist_digits):
 def invert_grayscale(mnist_digits):
     """ Makes black white, and white black """
     return 1-mnist_digits
+
+
+if "__main__" == __name__:
+    conv3d_plot()
