@@ -155,7 +155,7 @@ class Net3D():
                 print("Model loaded from file: %s" % os.path.join(log_dir, self.name + ".ckpt"))
 
 
-            def accuracy_test(dataset, data_dict, writer, idx):
+            def accuracy_test(dataset, data_dict, writer, idx, msg):
                 dataset.restart_mini_batches(data_dict)
                 sum_acc = 0
                 for j in range(dataset.num_mini_batches(data_dict)):
@@ -165,7 +165,7 @@ class Net3D():
                     sum_acc += acc
                 # write only last summary after mini batch
                 writer.add_summary(summary, idx)
-                print('Accuracy at step %s: %s' % (i, sum_acc / data_dict[dataset.NUMBER_EXAMPLES]))
+                print('Accuracy of %s at step %s: %s' % (msg, i, sum_acc / data_dict[dataset.NUMBER_EXAMPLES]))
 
 
             # run the training cycle
@@ -181,14 +181,14 @@ class Net3D():
                         y = convert_to_one_hot(y, self.dataset.num_classes)
                         # train and get summary
                         summary, _ = sess.run([summary_op, optimizer], feed_dict={X: x, Y: y, keep_prob: self.keep_prob})
-                    # write only last summary after mini batch
-                    train_writer.add_summary(summary, i)
+                        # write only last summary after mini batch
+                        train_writer.add_summary(summary, i * j + j)
 
 
-                    if i % 10 == 0:  # Record summaries and train-set accuracy
-                        accuracy_test(self.dataset, self.dataset.train, train_writer, i)
-                        accuracy_test(self.dataset, self.dataset.test, test_writer, i)
-                        accuracy_test(self.dataset, self.dataset.dev, dev_writer, i)
+                    if i % 2 == 0:  # Record summaries and train-set accuracy
+                        accuracy_test(self.dataset, self.dataset.train, train_writer, i, "train")
+                        accuracy_test(self.dataset, self.dataset.test, test_writer, i, "test")
+                        accuracy_test(self.dataset, self.dataset.dev, dev_writer, i, "dev")
                         
                     
 

@@ -193,7 +193,7 @@ def create_set(filename, outpath, inpath):
     rots = []
 
     for xrot in range(-80, 81, 20):
-        for yrot in range(0, 360, 2):
+        for yrot in range(0, 360, 10):
             rots.append([xrot, yrot])
     
     rots = np.array(rots)
@@ -238,10 +238,10 @@ def create_set(filename, outpath, inpath):
 
 
 def create_dataset():
-    train_path = "./3d-object-recognition/data/train"
-    test_path = "./3d-object-recognition/data/test"
-    dev_path = "./3d-object-recognition/data/dev"
-    outpath = "./3d-object-recognition/data/"
+    train_path = "./3d-object-recognition/data-small/train"
+    test_path = "./3d-object-recognition/data-small/test"
+    dev_path = "./3d-object-recognition/data-small/dev"
+    outpath = "./3d-object-recognition/data-small/"
     inpath = "./3d-object-recognition/objects/off"
     exists_and_create(outpath)
     exists_and_create(train_path)
