@@ -117,7 +117,6 @@ class Net3D():
         pred_op = tf.where(cond, arg_max_prob, (-1) * tf.ones(tf.shape(arg_max_prob), dtype=tf.int64))
         accuracy_op = tf.equal(arg_max_prob, pred_op)
         accuracy_op = tf.reduce_sum(tf.cast(accuracy_op, tf.float32))
-        tf.summary.scalar("prediction_accuracy", accuracy_op)
         return pred_op, accuracy_op
 
 
@@ -181,14 +180,14 @@ class Net3D():
                         y = convert_to_one_hot(y, self.dataset.num_classes)
                         # train and get summary
                         summary, _ = sess.run([summary_op, optimizer], feed_dict={X: x, Y: y, keep_prob: self.keep_prob})
-                    # write only last summary after mini batch
-                    train_writer.add_summary(summary, i)
+                        # write only last summary after mini batch
+                        train_writer.add_summary(summary, i*self.dataset.num_mini_batches(self.dataset.train) + j)
+                        print(sess.run([step])) 
 
-
-                    if i % 10 == 0:  # Record summaries and train-set accuracy
-                        accuracy_test(self.dataset, self.dataset.train, train_writer, i)
-                        accuracy_test(self.dataset, self.dataset.test, test_writer, i)
-                        accuracy_test(self.dataset, self.dataset.dev, dev_writer, i)
+                    # if i % 2 == 0:  # Record summaries and train-set accuracy
+                    #     accuracy_test(self.dataset, self.dataset.train, train_writer, i)
+                    #     accuracy_test(self.dataset, self.dataset.test, test_writer, i)
+                    #     accuracy_test(self.dataset, self.dataset.dev, dev_writer, i)
                         
                     
 
