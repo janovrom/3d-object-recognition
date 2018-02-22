@@ -5,10 +5,11 @@ from nn_template import *
 class Voxels(dataset_template):
 
     label_dict = {
-        "teapot"        : 0,
-        "controller"    : 1,
-        "htccontrol"    : 2,
-        "mouse"         : 3
+        "cube"      : 0,
+        "cone"      : 1,
+        "sphere"    : 2,
+        "torus"     : 3,
+        "cylinder"  : 4
     }
 
     def __load_dataset(self, path, data_dict):
@@ -25,13 +26,13 @@ class Voxels(dataset_template):
     def __init__(self, datapath, batch_size=8, ishape=[16,16,16,1],n_classes=256):
         super().__init__(datapath, batch_size, ishape, n_classes)
         # declare datasets
-        self.test = {}
         self.train = {}
+        self.test = {}
         self.dev = {}
         # initialize datasets
-        self.__load_dataset(os.path.join(datapath, "tdf" + str(ishape[0]), "train"), self.train)
-        # self.__load_dataset(os.path.join(datapath, "tdf" + str(ishape[0]), "dev"), self.dev)
-        # self.__load_dataset(os.path.join(datapath, "tdf" + str(ishape[0]), "test"), self.test)
+        self.__load_dataset(os.path.join(datapath, "train"), self.train)
+        self.__load_dataset(os.path.join(datapath, "test"), self.test)
+        self.__load_dataset(os.path.join(datapath, "dev"), self.dev)
 
 
     def load_test_scene(self, idx):
@@ -73,17 +74,4 @@ class Voxels(dataset_template):
 
         dataset[dataset_template.CURRENT_BATCH] += 1
         return np.array(data), np.array(labels)
-
-
-    def save_label(self, dataset, label):
-        labels = np.transpose(labels)
-        start = (dataset[dataset_template.CURRENT_BATCH] - 1) * self.batch_size
-        end = min(start + self.batch_size, dataset[dataset_template.NUMBER_EXAMPLES])
-        path = os.path.join(dataset[dataset_template.PATH], os.pardir, "test_out")
-        for i in range(start, end):
-            fname = dataset[dataset_template.DATASET][i]
-            with open(os.path.join(path, os.path.splitext(fname)[0] + "_label_" + str((labels[i-start]))), "w"):
-                pass
-            
-
 

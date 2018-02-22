@@ -1,0 +1,1 @@
+tensorboard --logdir=D:\janovrom\Python\3d-object-recognition\Net3D

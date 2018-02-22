@@ -2,6 +2,8 @@ import tensorflow as tf
 import numpy as np 
 import json
 import os
+from nn_utils import *
+from voxels import Voxels
 
 
 class Net3D():
@@ -25,7 +27,7 @@ class Net3D():
             Y = tf.placeholder(dtype=tf.float32, shape=(None, n_y), name="input_label")
             keep_prob = tf.placeholder(dtype=tf.float32, name="keep_probability")
 
-        return X, Y
+        return X, Y, keep_prob
 
     
     def forward_propagation(self, X, keep_prob, path):
@@ -64,7 +66,9 @@ class Net3D():
                         Z = Z + b
                         if "activation" in l and l["activation"].lower() == "relu":
                             Z = tf.nn.relu(Z + b)
-                        elif "activation" in l:
+                        elif "activation" not in l:
+                            pass
+                        else:
                             raise "Wrong activation provided"
 
                         if "dropout" in l:
@@ -107,22 +111,23 @@ class Net3D():
         """
 
         softmax = tf.nn.softmax(logits=Zl)
-        max_prob = tf.reduce_max(softmax)
-        pred_op = tf.where(tf.greater(max_prob, tf.constant(self.min_prob)), tf.argmax(softmax), tf.constant(-1))
-        accuracy_op = tf.equal(tf.argmax(Y), pred_op)
+        max_prob = tf.reduce_max(softmax, axis=1)
+        cond = tf.greater(max_prob, self.min_prob)
+        arg_max_prob = tf.argmax(softmax, axis=1)
+        pred_op = tf.where(cond, arg_max_prob, (-1) * tf.ones(tf.shape(arg_max_prob), dtype=tf.int64))
+        accuracy_op = tf.equal(arg_max_prob, pred_op)
+        accuracy_op = tf.reduce_sum(tf.cast(accuracy_op, tf.float32))
         tf.summary.scalar("prediction_accuracy", accuracy_op)
-        tf.summary.scalar("prediction", pred_op)
-        tf.summary.scalar("maximum_likelihood", max_prob)
         return pred_op, accuracy_op
 
 
-    def run_model (self, dataset, print_cost=True, load=False, train=True):
+    def run_model (self, print_cost=True, load=False, train=True):
         # initialize some commonly used variables
         log_dir = os.path.join("./3d-object-recognition", self.name)
 
         tf.reset_default_graph()
-        m, n_H0, n_W0, n_C0 = dataset.input_shape(dataset.train)
-        n_y = dataset.num_classes
+        m, n_H0, n_W0, n_C0 = self.dataset.input_shape(self.dataset.train)
+        n_y = self.dataset.num_classes
         X, Y, keep_prob = self.create_placeholders(n_H0, n_W0, n_C0, n_y)
         Zl = self.forward_propagation(X, keep_prob, os.path.join(log_dir, "network.json"))
         cost = self.compute_cost(Zl, Y)
@@ -136,6 +141,7 @@ class Net3D():
         tf.summary.scalar("learning_rate", lr_dec)
         tf.summary.scalar("global_step", step)
         tf.summary.scalar("cost", cost)
+        dev_writer = tf.summary.FileWriter(os.path.join(log_dir, "dev"), graph=tf.get_default_graph())
         test_writer = tf.summary.FileWriter(os.path.join(log_dir, "test"), graph=tf.get_default_graph())
         train_writer = tf.summary.FileWriter(os.path.join(log_dir, "train"), graph=tf.get_default_graph())
         summary_op = tf.summary.merge_all()
@@ -148,16 +154,43 @@ class Net3D():
                 tf.train.Saver().restore(sess, os.path.join(log_dir, self.name + ".ckpt"))
                 print("Model loaded from file: %s" % os.path.join(log_dir, self.name + ".ckpt"))
 
+
+            def accuracy_test(dataset, data_dict, writer, idx):
+                dataset.restart_mini_batches(data_dict)
+                sum_acc = 0
+                for j in range(dataset.num_mini_batches(data_dict)):
+                    x,y = dataset.next_mini_batch(data_dict)
+                    y = convert_to_one_hot(y, dataset.num_classes)
+                    summary, acc = sess.run([summary_op, accuracy_op], feed_dict={X: x, Y: y, keep_prob: 1})
+                    sum_acc += acc
+                # write only last summary after mini batch
+                writer.add_summary(summary, idx)
+                print('Accuracy at step %s: %s' % (i, sum_acc / data_dict[dataset.NUMBER_EXAMPLES]))
+
+
             # run the training cycle
             if train:
                 for i in range(self.num_epochs):
-                    if i % 10 == 0:  # Record summaries and test-set accuracy
-                        summary, acc = sess.run([summary_op, accuracy_op], feed_dict={X: x, Y: y, keep_prob: 1})
-                        test_writer.add_summary(summary, i)
-                        print('Accuracy at step %s: %s' % (i, acc))
-                    
-                    summary, _ = sess.run([summary_op, optimizer], feed_dict={X: x, Y: y, keep_prob: self.keep_prob})
+                    # restart dataset for each of the sets
+                    self.dataset.restart_mini_batches(self.dataset.train)
+                    self.dataset.restart_mini_batches(self.dataset.test)
+                    self.dataset.restart_mini_batches(self.dataset.dev)
+
+                    for j in range(self.dataset.num_mini_batches(self.dataset.train)):
+                        x,y = self.dataset.next_mini_batch(self.dataset.train)
+                        y = convert_to_one_hot(y, self.dataset.num_classes)
+                        # train and get summary
+                        summary, _ = sess.run([summary_op, optimizer], feed_dict={X: x, Y: y, keep_prob: self.keep_prob})
+                    # write only last summary after mini batch
                     train_writer.add_summary(summary, i)
+
+
+                    if i % 10 == 0:  # Record summaries and train-set accuracy
+                        accuracy_test(self.dataset, self.dataset.train, train_writer, i)
+                        accuracy_test(self.dataset, self.dataset.test, test_writer, i)
+                        accuracy_test(self.dataset, self.dataset.dev, dev_writer, i)
+                        
+                    
 
 
     def __init__(self, model_name):
@@ -168,10 +201,15 @@ class Net3D():
             self.name = model_name
             self.lr =           jparams["learning_rate"]
             self.num_epochs =   jparams["num_epochs"]
-            self.n_d =          jparams["descriptor_size"]
             self.l2_reg_w =     jparams["l2_reg_weights"]
             self.l2_reg_b =     jparams["l2_reg_biases"] 
             self.decay_step =   jparams["decay_step"] 
             self.decay_rate =   jparams["decay_rate"] 
             self.min_prob =     jparams["min_prob"] 
             self.keep_prob =    jparams["keep_prob"] 
+            self.dataset =      Voxels("./3d-object-recognition/data", batch_size=jparams["batch_size"], ishape=jparams["input_shape"], n_classes=jparams["num_classes"])
+
+
+if __name__ == "__main__":
+    model = Net3D("Net3D")
+    model.run_model(print_cost=True, load=False, train=True)
