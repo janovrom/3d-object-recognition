@@ -169,6 +169,10 @@ class Net3D():
 
             # run the training cycle
             if train:
+                # full trace for training summaries
+                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                run_metadata = tf.RunMetadata()
+
                 for i in range(self.num_epochs):
                     # restart dataset for each of the sets
                     self.dataset.restart_mini_batches(self.dataset.train)
@@ -179,7 +183,9 @@ class Net3D():
                         x,y = self.dataset.next_mini_batch(self.dataset.train)
                         y = convert_to_one_hot(y, self.dataset.num_classes)
                         # train and get summary
-                        summary, _ = sess.run([summary_op, optimizer], feed_dict={X: x, Y: y, keep_prob: self.keep_prob})
+                        summary, _ = sess.run([summary_op, optimizer], feed_dict={X: x, Y: y, keep_prob: self.keep_prob},
+                              options=run_options,
+                              run_metadata=run_metadata)
                         # write only last summary after mini batch
                         train_writer.add_summary(summary, i * j + j)
 
