@@ -66,7 +66,15 @@ class Net3D():
                         Z = tf.nn.conv3d(Z, W, strides=s, padding=p)
                         Z = Z + b
                         if "activation" in l and l["activation"].lower() == "relu":
-                            Z = tf.nn.relu(Z + b)
+                            Z = tf.nn.relu(Z)
+                        elif "activation" in l and l["activation"].lower() == "selu":
+                            Z = tf.nn.selu(Z)
+                        elif "activation" in l and l["activation"].lower() == "softplus":
+                            Z = tf.nn.softplus(Z)
+                        elif "activation" in l and l["activation"].lower() == "softsign":
+                            Z = tf.nn.softsign(Z)
+                        elif "activation" in l and l["activation"].lower() == "crelu":
+                            Z = tf.nn.crelu(Z)
                         elif "activation" not in l:
                             pass
                         else:
@@ -111,7 +119,8 @@ class Net3D():
             Y -- label placeholder, contains one-hot vector
 
         Returns:
-            pred_op -- tensor, prediction operator
+            pred_op -- tensor, label prediction operator
+            accuracy_op -- tensor, number of correctly classified
         """
 
         softmax = tf.nn.softmax(logits=Zl)
@@ -121,7 +130,7 @@ class Net3D():
         pred_op = tf.where(cond, arg_max_prob, (-1) * tf.ones(tf.shape(arg_max_prob), dtype=tf.int64))
         accuracy_op = tf.equal(arg_max_prob, pred_op)
         accuracy_op = tf.reduce_sum(tf.cast(accuracy_op, tf.int32))
-        return pred_op, accuracy_op
+        return arg_max_prob, accuracy_op
 
 
     def run_model (self, print_cost=True, load=False, train=True):
@@ -137,7 +146,10 @@ class Net3D():
         pred_op, accuracy_op = self.compute_predictions(Zl, Y)
         step = tf.Variable(0, trainable=False, name="global_step")
         lr_dec = tf.train.exponential_decay(self.lr, step, self.decay_step, self.decay_rate, staircase=True)
-        optimizer = tf.train.AdamOptimizer(learning_rate=lr_dec).minimize(cost, global_step=step)
+        optimizer = tf.train.AdamOptimizer(learning_rate=lr_dec)
+        gvs = optimizer.compute_gradients(cost)
+        capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
+        train_op = optimizer.apply_gradients(capped_gvs)
         init = tf.global_variables_initializer()
 
         # create summaries
@@ -161,14 +173,17 @@ class Net3D():
             def accuracy_test(dataset, data_dict, writer, idx, msg):
                 dataset.restart_mini_batches(data_dict)
                 sum_acc = 0
+                sum_acc_argmax = 0
                 for j in range(dataset.num_mini_batches(data_dict)):
                     x,y = dataset.next_mini_batch(data_dict)
-                    y = convert_to_one_hot(y, dataset.num_classes)
-                    summary, acc = sess.run([summary_op, accuracy_op], feed_dict={X: x, Y: y, keep_prob: 1})
+                    y_hot = convert_to_one_hot(y, dataset.num_classes)
+                    pred, acc = sess.run([pred_op, accuracy_op], feed_dict={X: x, Y: y_hot, keep_prob: 1})
                     sum_acc += acc
+                    sum_acc_argmax += np.sum(pred == y)
                 # write only last summary after mini batch
                 writer.add_summary(summary, idx)
-                print('Accuracy of %s at step %s: %s' % (msg, i, sum_acc / data_dict[dataset.NUMBER_EXAMPLES]))
+                # print('Accuracy of %s at step %s: %s' % (msg, i, sum_acc / data_dict[dataset.NUMBER_EXAMPLES]))
+                print('Accuracy argmax of %s at step %s: %s' % (msg, i, sum_acc_argmax / data_dict[dataset.NUMBER_EXAMPLES]))
 
 
             # run the training cycle
@@ -187,7 +202,7 @@ class Net3D():
                         x,y = self.dataset.next_mini_batch(self.dataset.train)
                         y = convert_to_one_hot(y, self.dataset.num_classes)
                         # train and get summary
-                        summary, _ = sess.run([summary_op, optimizer], feed_dict={X: x, Y: y, keep_prob: self.keep_prob},
+                        summary, _ = sess.run([summary_op, train_op], feed_dict={X: x, Y: y, keep_prob: self.keep_prob},
                               options=run_options,
                               run_metadata=run_metadata)
                         # write only last summary after mini batch
@@ -197,22 +212,34 @@ class Net3D():
                         accuracy_test(self.dataset, self.dataset.train, train_writer, i, "train")
                         accuracy_test(self.dataset, self.dataset.test, test_writer, i, "test")
                         accuracy_test(self.dataset, self.dataset.dev, dev_writer, i, "dev")
+                        print("##################################################")
+            
+            # save model
+            save_path = tf.train.Saver().save(sess, os.path.join(log_dir, self.name + ".ckpt"))
+            print("Model saved in file: %s" % save_path)
 
 
             def getActivations(layer,stimuli, label):
+                print(layer)
                 units = sess.run(layer,feed_dict={X:np.reshape(stimuli,[1,n_H0,n_W0,n_C0,1],order='F'), Y: np.reshape(label, [1,n_y]),keep_prob:1.0})
                 conv3d_plot(units)
 
             # display activations
             self.dataset.restart_mini_batches(self.dataset.test)
             x,y = self.dataset.next_mini_batch(self.dataset.test)
-            y = convert_to_one_hot(y, self.dataset.num_classes)
-            # display stimuli
-            display_stimuli(x[0], x[0].shape[0])
-            with open(os.path.join(log_dir, "network.json"), "r") as f:
-                layers = json.load(f)["layers"]
-                for l in layers:
-                    getActivations(Ws[l["name"]+"/activations"], x[0], y[0])
+            y_hot = convert_to_one_hot(y, self.dataset.num_classes)
+            pred, acc = sess.run([pred_op, accuracy_op], feed_dict={X: x, Y: y_hot, keep_prob: 1})
+            print(sess.run([Zl], feed_dict={X: x, Y: y_hot, keep_prob: 1}))
+            for i in range(0, x.shape[0]):
+                # display stimuli
+                display_stimuli(x[i], x[i].shape[0])
+                with open(os.path.join(log_dir, "network.json"), "r") as f:
+                    layers = json.load(f)["layers"]
+                    for l in layers:
+                        getActivations(Ws[l["name"]+"/activations"], x[i], y_hot[i])
+                
+                predicted_label = self.dataset.label_to_name(pred[i])
+                print("Predicted %s and expected %s" % (predicted_label, self.dataset.label_to_name(y[i])))
 
 
     def __init__(self, model_name):
@@ -229,9 +256,9 @@ class Net3D():
             self.decay_rate =   jparams["decay_rate"] 
             self.min_prob =     jparams["min_prob"] 
             self.keep_prob =    jparams["keep_prob"] 
-            self.dataset =      Voxels("./3d-object-recognition/data", batch_size=jparams["batch_size"], ishape=jparams["input_shape"], n_classes=jparams["num_classes"])
+            self.dataset =      Voxels("./3d-object-recognition/data-16", batch_size=jparams["batch_size"], ishape=jparams["input_shape"], n_classes=jparams["num_classes"])
 
 
 if __name__ == "__main__":
-    model = Net3D("Net3D")
-    model.run_model(print_cost=True, load=False, train=True)
+    model = Net3D("Net3D-16")
+    model.run_model(print_cost=True, load=True, train=False)

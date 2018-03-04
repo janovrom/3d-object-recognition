@@ -18,8 +18,6 @@ class OctreeNode():
         self.is_leaf = True
 
 
-X = []
-
 
 class Octree():
 
@@ -29,6 +27,7 @@ class Octree():
         self.tree_min = aabb_min
         self.tree_max = aabb_max
         self.root = OctreeNode() # just for root
+        self.X = [] # list for occlussion
 
         Octree.triplets = np.zeros((8,3))
         Octree.triplets[0,:] = [0, 0, 0]
@@ -46,14 +45,14 @@ class Octree():
 
 
     def get_occlussion(self):
-        return X
+        return self.X
 
 
     def recursive_tree(self, node, tris, min_e, max_e, level):
-        if level == 6 or tris.shape[0] < 2:
+        if level == 5 or tris.shape[0] < 2:
             node.mark_as_leaf(tris)
             if tris.shape[0] > 0:
-                X.append(min_e)
+                self.X.append(min_e)
             return
 
 

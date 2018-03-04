@@ -1,5 +1,6 @@
 import octree as octree
 import random
+import sys
 from multiprocessing import Pool
 from functools import partial
 import os
@@ -187,22 +188,22 @@ def exists_and_create(datapath):
         os.chmod(datapath, 0o777)
 
 
-def create_set(filename, outpath, inpath):
+def create_set(filename, outpath, inpath, insize):
     print("Creating set for: " + filename)
 
     rots = []
 
-    for xrot in range(-80, 81, 20):
-        for yrot in range(0, 360, 10):
+    for xrot in range(-80, 81, 40):
+        for yrot in range(0, 360, 60):
             rots.append([xrot, yrot])
     
     rots = np.array(rots)
     indices = np.random.permutation(len(rots))
     # print(indices[0:len(rots)-200])
-
-    rots_train = rots[indices[0:len(rots)-200]]
-    rots_test = rots[indices[len(rots)-200:len(rots)-100]]
-    rots_dev = rots[indices[len(rots)-100:len(rots)]]
+    ten_percent = int(len(rots) / 10.0)
+    rots_train = rots[indices[0:len(rots)-2*ten_percent]]
+    rots_test = rots[indices[len(rots)-2*ten_percent:len(rots)-ten_percent]]
+    rots_dev = rots[indices[len(rots)-ten_percent:len(rots)]]
 
     def create(set_name, rotations):
         idx = 0
@@ -219,9 +220,9 @@ def create_set(filename, outpath, inpath):
             X = np.array(tree.get_occlussion())
             # hash it to the regular grid
             mins, maxs = getAABB(np.transpose(X))
-            X = 31 * (X - mins) / (maxs - mins)
+            X = (insize-1) * (X - mins) / (maxs - mins)
             X = X.astype(int)
-            occ_grid = np.zeros((32,32,32), dtype=np.int)
+            occ_grid = np.zeros((insize,insize,insize), dtype=np.int)
             for i in range(0, X.shape[0]):
                 x, y, z = X[i,:]
                 occ_grid[x,y,z] = 1
@@ -238,10 +239,10 @@ def create_set(filename, outpath, inpath):
 
 
 def create_dataset():
-    train_path = "./3d-object-recognition/data-small/train"
-    test_path = "./3d-object-recognition/data-small/test"
-    dev_path = "./3d-object-recognition/data-small/dev"
-    outpath = "./3d-object-recognition/data-small/"
+    train_path = "./3d-object-recognition/data-supersmall-16/train"
+    test_path = "./3d-object-recognition/data-supersmall-16/test"
+    dev_path = "./3d-object-recognition/data-supersmall-16/dev"
+    outpath = "./3d-object-recognition/data-supersmall-16/"
     inpath = "./3d-object-recognition/objects/off"
     exists_and_create(outpath)
     exists_and_create(train_path)
@@ -250,7 +251,7 @@ def create_dataset():
 
     p = Pool(5)
 
-    p.map(partial(create_set, outpath=outpath,inpath=inpath), [
+    p.map(partial(create_set, outpath=outpath,inpath=inpath, insize=16), [
         "cube.off",
         "cone.off",
         "torus.off",
@@ -264,34 +265,35 @@ def create_dataset():
 
 
 if __name__ == '__main__':
-    create_dataset()
-
+    # create_dataset()
+    
     # sanity check on saved data
-    # train_path = "./3d-object-recognition/data/train/cube_0"
-    # f = open(train_path, "rb")
-    # occ = np.load(f)
-    # xs = []
-    # ys = []
-    # zs = []
-    # for i in range(0, 32):
-    #     for j in range(0, 32):
-    #         for k in range(0, 32):
-    #             if occ[i,j,k] == 1:
-    #                 xs.append(i)
-    #                 ys.append(j)
-    #                 zs.append(k)
+    s = 32
+    train_path = "./3d-object-recognition/data-small/train/torus_87"
+    f = open(train_path, "rb")
+    occ = np.load(f)
+    xs = []
+    ys = []
+    zs = []
+    for i in range(0, s):
+        for j in range(0, s):
+            for k in range(0, s):
+                if occ[i,j,k] == 1:
+                    xs.append(i)
+                    ys.append(j)
+                    zs.append(k)
 
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    # ax.scatter(xs=xs, ys=ys, zs=zs, c=[0.1,0.1,0.1,0.2], marker='o')
-    # ax.set_xlabel('X Label')
-    # ax.set_ylabel('Y Label')
-    # ax.set_zlabel('Z Label')
-    # ax.set_xlim3d(0, 32)
-    # ax.set_ylim3d(0, 32)
-    # ax.set_zlim3d(0, 32)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(xs=xs, ys=ys, zs=zs, c=[0.1,0.1,0.1,0.2], marker='o')
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+    ax.set_xlim3d(0, s)
+    ax.set_ylim3d(0, s)
+    ax.set_zlim3d(0, s)
 
-    # plt.show()     
+    plt.show()     
 
     # # sanity check on rotations
     # tris = dl.load_off_file("./3d-object-recognition/objects/off/cone.off")

@@ -75,3 +75,10 @@ class Voxels(dataset_template):
         dataset[dataset_template.CURRENT_BATCH] += 1
         return np.array(data), np.array(labels)
 
+
+    def label_to_name(self, label):
+        for key,val in Voxels.label_dict.items():
+            if val == label:
+                return key
+
+        return ""

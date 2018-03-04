@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import os
+from matplotlib.colors import LinearSegmentedColormap
 
 
 def display_stimuli(stimuli, size):
@@ -33,34 +34,58 @@ def display_stimuli(stimuli, size):
 def conv3d_plot(filters):
     print(filters.shape)
     num_filters = filters.shape[-1]
-    filter_size = filters.shape[0]
+    # filter_size = filters.shape[0]
     rows = 8
     g_x = np.ceil(num_filters / rows)
     fig = plt.figure()
+    zero_coutn = 0
+    min_in_units = np.min(filters[0,:,:,:,:])
+    filters = filters - min_in_units
+    max_in_units = np.max(filters[0,:,:,:,:])
+    filters = filters / max_in_units
+    if max_in_units < 0.00001: 
+        print("There is zero as max in filter.")
     for i in range(0, num_filters):
         ax = fig.add_subplot(rows, g_x, i+1, projection='3d')
         filter = filters[0,:,:,:,i]
-        filter = filter - np.min(filter)
-        filter = filter / np.max(filter)
+        # filter = filter - np.min(filter)
+        # if np.max(filter) < 0.0001: # test if all are zeros
+        #     zero_coutn += 1
+        # filter = filter / np.max(filter)
+        # continue
+        print(filter)
         xs = []
         ys = []
         zs = []
         vs = []
-        for x in range(0,filter_size):
-            for y in range(0,filter_size):
-                for z in range(0,filter_size):
-                        xs.append(x)
-                        ys.append(y)
-                        zs.append(z)
+        xs.append(0)
+        ys.append(0)
+        zs.append(0)
+        vs.append(1)
+        xs.append(0)
+        ys.append(0)
+        zs.append(0)
+        vs.append(0)
+        for x in range(0,filter.shape[0]):
+            for y in range(0,filter.shape[1]):
+                for z in range(0,filter.shape[2]):
+                        xs.append(x + 0.5)
+                        ys.append(y + 0.5)
+                        zs.append(z + 0.5)
                         vs.append(filter[x,y,z])
-        ax.scatter(xs, ys, zs, vs, cmap="magma", marker='o')
+        
+
+        cm = LinearSegmentedColormap.from_list("alpha", [(0.0,0.0,0.0,0.0), (1.0,0.0,0.0,1.0)])
+        # ax.scatter(xs, ys, zs, color=vs, marker='o')
+        ax.scatter(xs, ys, zs, vs, c=vs, cmap=cm, marker='o')
         ax.set_xlabel('X Label')
         ax.set_ylabel('Y Label')
         ax.set_zlabel('Z Label')
-        ax.set_xlim3d(0, filter_size)
-        ax.set_ylim3d(0, filter_size)
-        ax.set_zlim3d(0, filter_size)
+        ax.set_xlim3d(0, filter.shape[0])
+        ax.set_ylim3d(0, filter.shape[1])
+        ax.set_zlim3d(0, filter.shape[2])
 
+    print("%d from %d filters has all zeros." % (zero_coutn, num_filters))
     plt.show()     
 
 
