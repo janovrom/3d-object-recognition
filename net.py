@@ -181,9 +181,10 @@ class Net3D():
                     sum_acc += acc
                     sum_acc_argmax += np.sum(pred == y)
                 # write only last summary after mini batch
-                writer.add_summary(summary, idx)
+                if summary:
+                    writer.add_summary(summary, idx)
                 # print('Accuracy of %s at step %s: %s' % (msg, i, sum_acc / data_dict[dataset.NUMBER_EXAMPLES]))
-                print('Accuracy argmax of %s at step %s: %s' % (msg, i, sum_acc_argmax / data_dict[dataset.NUMBER_EXAMPLES]))
+                print('Accuracy argmax of %s at step %s: %s' % (msg, idx, sum_acc_argmax / data_dict[dataset.NUMBER_EXAMPLES]))
 
 
             # run the training cycle
@@ -218,31 +219,34 @@ class Net3D():
             save_path = tf.train.Saver().save(sess, os.path.join(log_dir, self.name + ".ckpt"))
             print("Model saved in file: %s" % save_path)
 
+            if train == False:
+                # print at least something
+                summary = None
+                accuracy_test(self.dataset, self.dataset.test, test_writer, -1, "test")
 
-            def getActivations(layer,stimuli, label):
-                print(layer)
+            def getActivations(layer,stimuli, label, ignore_input=True):
                 units = sess.run(layer,feed_dict={X:np.reshape(stimuli,[1,n_H0,n_W0,n_C0,1],order='F'), Y: np.reshape(label, [1,n_y]),keep_prob:1.0})
-                conv3d_plot(units)
+                conv3d_plot(units, ignore_input=True)
 
             # display activations
             self.dataset.restart_mini_batches(self.dataset.test)
-            x,y = self.dataset.next_mini_batch(self.dataset.test)
-            y_hot = convert_to_one_hot(y, self.dataset.num_classes)
-            pred, acc = sess.run([pred_op, accuracy_op], feed_dict={X: x, Y: y_hot, keep_prob: 1})
-            print(sess.run([Zl], feed_dict={X: x, Y: y_hot, keep_prob: 1}))
-            for i in range(0, x.shape[0]):
-                # display stimuli
-                display_stimuli(x[i], x[i].shape[0])
-                with open(os.path.join(log_dir, "network.json"), "r") as f:
-                    layers = json.load(f)["layers"]
-                    for l in layers:
-                        getActivations(Ws[l["name"]+"/activations"], x[i], y_hot[i])
-                
-                predicted_label = self.dataset.label_to_name(pred[i])
-                print("Predicted %s and expected %s" % (predicted_label, self.dataset.label_to_name(y[i])))
+            for name in ["sphere", "torus", "cube", "cone", "cylinder"]:
+                x,y = self.dataset.get_data(self.dataset.test, name)
+                y_hot = convert_to_one_hot(y, self.dataset.num_classes)
+                pred, acc = sess.run([pred_op, accuracy_op], feed_dict={X: x, Y: y_hot, keep_prob: 1})
+                for i in range(0, x.shape[0]):
+                    # display stimuli
+                    display_stimuli(x[i], x[i].shape[0])
+                    with open(os.path.join(log_dir, "network.json"), "r") as f:
+                        layers = json.load(f)["layers"]
+                        for l in layers:
+                            getActivations(Ws[l["name"]+"/activations"], x[i], y_hot[i], ignore_input=True)
+                    
+                    predicted_label = self.dataset.label_to_name(pred[i])
+                    print("Predicted %s and expected %s" % (predicted_label, self.dataset.label_to_name(y[i])))
 
 
-    def __init__(self, model_name):
+    def __init__(self, model_name, datapath):
         assert os.path.exists(os.path.join("./3d-object-recognition", model_name, "network.json"))
 
         with open(os.path.join("./3d-object-recognition", model_name, "network.json"), "r") as f:
@@ -256,9 +260,9 @@ class Net3D():
             self.decay_rate =   jparams["decay_rate"] 
             self.min_prob =     jparams["min_prob"] 
             self.keep_prob =    jparams["keep_prob"] 
-            self.dataset =      Voxels("./3d-object-recognition/data-16", batch_size=jparams["batch_size"], ishape=jparams["input_shape"], n_classes=jparams["num_classes"])
+            self.dataset =      Voxels(datapath, batch_size=jparams["batch_size"], ishape=jparams["input_shape"], n_classes=jparams["num_classes"])
 
 
 if __name__ == "__main__":
-    model = Net3D("Net3D-16")
+    model = Net3D("Net3D-16", "./3d-object-recognition/data-16")
     model.run_model(print_cost=True, load=True, train=False)

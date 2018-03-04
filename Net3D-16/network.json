@@ -2,13 +2,13 @@
     "params":
     {
         "learning_rate" : 0.0001,
-        "num_epochs" : 100,
+        "num_epochs" : 30,
         "l2_reg_weights" : 0.3,
         "l2_reg_biases" : 0.1,
         "decay_step" : 1000,
         "decay_rate" : 0.96,
         "min_prob" : 0.0,
-        "keep_prob" : 0.2,
+        "keep_prob" : 0.45,
         "input_shape" : [16,16,16,1],
         "batch_size" : 16,
         "num_classes" : 5

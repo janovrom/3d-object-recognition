@@ -60,6 +60,23 @@ class Voxels(dataset_template):
         return np.array(data), np.array(labels), np.array(occupancy), np.array(points)
 
 
+    def get_data(self, dataset, name):
+        data = []
+        labels = []
+        for fname in dataset[dataset_template.DATASET]:
+            if name in fname:
+                print("Searched for %s, found %s." % (name, fname))
+                filename = os.path.join(dataset[dataset_template.PATH], fname)
+                with open(filename, "rb") as f:
+                    data.append(np.reshape(np.load(f), self.shape))
+                    labels.append(int(self.label_dict[os.path.basename(fname).split("_")[0]]))
+                break
+
+        if len(data) == 0:
+            print("No such name found: "+name)
+        return np.array(data), np.array(labels)
+
+
     def next_mini_batch(self, dataset):
         data = []
         labels = []
