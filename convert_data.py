@@ -269,7 +269,7 @@ if __name__ == '__main__':
     
     # sanity check on saved data
     s = 32
-    train_path = "./3d-object-recognition/data-small/train/torus_87"
+    train_path = "./3d-object-recognition/data-small/train/sphere_87"
     f = open(train_path, "rb")
     occ = np.load(f)
     xs = []
