@@ -87,7 +87,6 @@ def conv3d_plot(filters, ignore_input=True):
         #     zero_coutn += 1
         # filter = filter / np.max(filter)
         # continue
-        print(filter)
         add_to_plot(ax, filter)
 
     print("%d from %d filters has all zeros." % (zero_coutn, num_filters))

@@ -133,7 +133,7 @@ class Net3D():
         return arg_max_prob, accuracy_op
 
 
-    def run_model (self, print_cost=True, load=False, train=True):
+    def run_model (self, print_cost=True, load=False, train=True, show_activations=False):
         # initialize some commonly used variables
         log_dir = os.path.join("./3d-object-recognition", self.name)
 
@@ -224,9 +224,13 @@ class Net3D():
                 summary = None
                 accuracy_test(self.dataset, self.dataset.test, test_writer, -1, "test")
 
+            # skip the rest, if no activations should be displayed
+            if not show_activations:
+                return
+
             def getActivations(layer,stimuli, label, ignore_input=True):
                 units = sess.run(layer,feed_dict={X:np.reshape(stimuli,[1,n_H0,n_W0,n_C0,1],order='F'), Y: np.reshape(label, [1,n_y]),keep_prob:1.0})
-                conv3d_plot(units, ignore_input=True)
+                conv3d_plot(units, ignore_input=ignore_input)
 
             # display activations
             self.dataset.restart_mini_batches(self.dataset.test)
@@ -264,5 +268,5 @@ class Net3D():
 
 
 if __name__ == "__main__":
-    model = Net3D("Net3D-16", "./3d-object-recognition/data-16")
-    model.run_model(print_cost=True, load=True, train=False)
+    model = Net3D("Net3D", "./3d-object-recognition/data-small")
+    model.run_model(print_cost=True, load=True, train=False, show_activations=True)
