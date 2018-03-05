@@ -239,10 +239,10 @@ def create_set(filename, outpath, inpath, insize):
 
 
 def create_dataset():
-    train_path = "./3d-object-recognition/data-8/train"
-    test_path = "./3d-object-recognition/data-8/test"
-    dev_path = "./3d-object-recognition/data-8/dev"
-    outpath = "./3d-object-recognition/data-8/"
+    train_path = "./3d-object-recognition/data-4/train"
+    test_path = "./3d-object-recognition/data-4/test"
+    dev_path = "./3d-object-recognition/data-4/dev"
+    outpath = "./3d-object-recognition/data-4/"
     inpath = "./3d-object-recognition/objects/off"
     exists_and_create(outpath)
     exists_and_create(train_path)
@@ -251,7 +251,7 @@ def create_dataset():
 
     p = Pool(5)
 
-    p.map(partial(create_set, outpath=outpath,inpath=inpath, insize=8), [
+    p.map(partial(create_set, outpath=outpath,inpath=inpath, insize=4), [
         "cube.off",
         "cone.off",
         "torus.off",
@@ -267,8 +267,9 @@ def convert_scale_dataset(from_path, to_path, insize, outsize):
     exists_and_create(os.path.join(to_path, "train"))
     exists_and_create(os.path.join(to_path, "test"))
     exists_and_create(os.path.join(to_path, "dev"))
-    fig_path = "./3d-object-recognition/figures/scaled-" + str(insize)
+    fig_path = "./3d-object-recognition/figures/scaled-" + str(outsize) + "-from-" +str(insize)
     exists_and_create(fig_path)
+    to_path = os.path.join(to_path, "test")
 
     for fname in os.listdir(from_path):
         filename = os.path.join(from_path, fname)
@@ -284,38 +285,39 @@ def convert_scale_dataset(from_path, to_path, insize, outsize):
         filename = os.path.join(to_path, fname)
         with open(filename, "wb") as f:
             np.save(f, grid)
-    
-        # sanity check
-        s = outsize
-        xs = []
-        ys = []
-        zs = []
-        for i in range(0, s):
-            for j in range(0, s):
-                for k in range(0, s):
-                    if grid[i,j,k] == 1:
-                        xs.append(i)
-                        ys.append(j)
-                        zs.append(k)
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(xs=xs, ys=ys, zs=zs, c=[0.1,0.1,0.1,0.2], marker='o')
-        ax.set_xlabel('X Label')
-        ax.set_ylabel('Y Label')
-        ax.set_zlabel('Z Label')
-        ax.set_xlim3d(0, s)
-        ax.set_ylim3d(0, s)
-        ax.set_zlim3d(0, s)
+        if "_0" in fname:
+            # sanity check
+            s = outsize
+            xs = []
+            ys = []
+            zs = []
+            for i in range(0, s):
+                for j in range(0, s):
+                    for k in range(0, s):
+                        if grid[i,j,k] == 1:
+                            xs.append(i)
+                            ys.append(j)
+                            zs.append(k)
 
-        # plt.show() 
-        plt.savefig(os.path.join(fig_path, fname.split(".")[0] + ".png"))   
-        plt.close() 
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(xs=xs, ys=ys, zs=zs, c=[0.1,0.1,0.1,0.2], marker='o')
+            ax.set_xlabel('X Label')
+            ax.set_ylabel('Y Label')
+            ax.set_zlabel('Z Label')
+            ax.set_xlim3d(0, s)
+            ax.set_ylim3d(0, s)
+            ax.set_zlim3d(0, s)
+
+            # plt.show() 
+            plt.savefig(os.path.join(fig_path, fname.split(".")[0] + ".png"))   
+            plt.close() 
 
 
 if __name__ == '__main__':
     # create_dataset()
-    convert_scale_dataset("./3d-object-recognition/data-8/test", "./3d-object-recognition/data-32-scaled-8/", 8, 32)
+    convert_scale_dataset("./3d-object-recognition/data-4/test", "./3d-object-recognition/data-16-scaled-4/", 4, 16)
     
     # sanity check on saved data
     # s = 8

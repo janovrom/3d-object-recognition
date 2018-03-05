@@ -49,7 +49,7 @@ class Octree():
 
 
     def recursive_tree(self, node, tris, min_e, max_e, level):
-        if level == 4 or tris.shape[0] < 2:
+        if level == 3 or tris.shape[0] < 2:
             node.mark_as_leaf(tris)
             if tris.shape[0] > 0:
                 self.X.append(min_e)

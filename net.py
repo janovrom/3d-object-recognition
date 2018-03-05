@@ -268,5 +268,5 @@ class Net3D():
 
 
 if __name__ == "__main__":
-    model = Net3D("Net3D-16-supersmall", "./3d-object-recognition/data-supersmall-16")
-    model.run_model(print_cost=True, load=True, train=False, show_activations=True)
+    model = Net3D("Net3D", "./3d-object-recognition/data-32-scaled-8")
+    model.run_model(print_cost=True, load=True, train=False, show_activations=False)
