@@ -4,6 +4,7 @@
 !.vscode/launch.json
 !.vscode/extensions.json
 /data-16
+/data-*
 /data-small
 /data-supersmall-16
 /__pycache__

@@ -5,6 +5,7 @@ from multiprocessing import Pool
 from functools import partial
 import os
 import math
+import shutil
 import numpy as np
 from timeit import default_timer as timer
 from numba import vectorize
@@ -262,14 +263,14 @@ def create_dataset():
     p.join()
 
 
-def convert_scale_dataset(from_path, to_path, insize, outsize):
+def convert_scale_dataset(from_path, to_path, insize, outsize, subdir):
     exists_and_create(to_path)
-    exists_and_create(os.path.join(to_path, "train"))
-    exists_and_create(os.path.join(to_path, "test"))
-    exists_and_create(os.path.join(to_path, "dev"))
+    from_path = os.path.join(from_path, subdir)
+    exists_and_create(from_path)
     fig_path = "./3d-object-recognition/figures/scaled-" + str(outsize) + "-from-" +str(insize)
     exists_and_create(fig_path)
-    to_path = os.path.join(to_path, "test")
+    to_path = os.path.join(to_path, subdir)
+    exists_and_create(from_path)
 
     for fname in os.listdir(from_path):
         filename = os.path.join(from_path, fname)
@@ -286,9 +287,128 @@ def convert_scale_dataset(from_path, to_path, insize, outsize):
         with open(filename, "wb") as f:
             np.save(f, grid)
 
+        # if "_0" in fname:
+        #     # sanity check
+        #     s = outsize
+        #     xs = []
+        #     ys = []
+        #     zs = []
+        #     for i in range(0, s):
+        #         for j in range(0, s):
+        #             for k in range(0, s):
+        #                 if grid[i,j,k] == 1:
+        #                     xs.append(i)
+        #                     ys.append(j)
+        #                     zs.append(k)
+
+        #     fig = plt.figure()
+        #     ax = fig.add_subplot(111, projection='3d')
+        #     ax.scatter(xs=xs, ys=ys, zs=zs, c=[0.1,0.1,0.1,0.2], marker='o')
+        #     ax.set_xlabel('X Label')
+        #     ax.set_ylabel('Y Label')
+        #     ax.set_zlabel('Z Label')
+        #     ax.set_xlim3d(0, s)
+        #     ax.set_ylim3d(0, s)
+        #     ax.set_zlim3d(0, s)
+
+        #     # plt.show() 
+        #     plt.savefig(os.path.join(fig_path, fname.split(".")[0] + ".png"))   
+        #     plt.close() 
+
+
+def convert_scaled_dataset_to_translation(from_path, to_path, insize, outsize, subdir):
+    exists_and_create(to_path)
+    from_path = os.path.join(from_path, subdir)
+    exists_and_create(from_path)
+    fig_path = "./3d-object-recognition/figures/translated-" + str(outsize) + "-from-" +str(insize)
+    exists_and_create(fig_path)
+    to_path = os.path.join(to_path, subdir)
+    exists_and_create(to_path)
+
+    for fname in os.listdir(from_path):
+        filename = os.path.join(from_path, fname)
+        grid = np.zeros((outsize, outsize, outsize))
+        end = int(outsize - insize - 1)
+        x = random.randint(0, end)
+        y = random.randint(0, end)
+        z = random.randint(0, end)
+
+        with open(filename, "rb") as f:
+            small_grid = np.reshape(np.load(f), (insize, insize, insize))
+            for i in range(0, insize):
+                for j in range(0,insize):
+                    for k in range(0,insize):
+                        grid[i+x,j+y,k+z] = small_grid[i,j,k]
+
+        filename = os.path.join(to_path, fname)
+        with open(filename, "wb") as f:
+            np.save(f, grid)
+
+        # if "_" in fname:
+        #     # sanity check
+        #     s = outsize
+        #     xs = []
+        #     ys = []
+        #     zs = []
+        #     for i in range(0, s):
+        #         for j in range(0, s):
+        #             for k in range(0, s):
+        #                 if grid[i,j,k] == 1:
+        #                     xs.append(i)
+        #                     ys.append(j)
+        #                     zs.append(k)
+
+        #     fig = plt.figure()
+        #     ax = fig.add_subplot(111, projection='3d')
+        #     ax.scatter(xs=xs, ys=ys, zs=zs, c=[0.1,0.1,0.1,0.2], marker='o')
+        #     ax.set_xlabel('X Label')
+        #     ax.set_ylabel('Y Label')
+        #     ax.set_zlabel('Z Label')
+        #     ax.set_xlim3d(0, s)
+        #     ax.set_ylim3d(0, s)
+        #     ax.set_zlim3d(0, s)
+
+        #     # plt.show() 
+        #     plt.savefig(os.path.join(fig_path, fname.split(".")[0] + ".png"))   
+        #     plt.close()
+
+
+def rename_set_files(in_dir, start_idx):
+    for fname in os.listdir(in_dir):
+        filename = os.path.join(in_dir, fname)
+        split = fname.split("_")
+        out_filename = os.path.join(in_dir, split[0] + "_" + str(int((split[1])) + int(start_idx)))
+        os.rename(filename, out_filename)
+
+
+def get_visible_set(in_dir, out_dir, insize, subdir):
+    fig_path = "./3d-object-recognition/figures/seen-" +str(insize)
+    exists_and_create(fig_path)
+    exists_and_create(out_dir)
+    out_dir = os.path.join(out_dir, subdir)
+    in_dir = os.path.join(in_dir, subdir)
+    exists_and_create(out_dir)
+
+    for fname in os.listdir(in_dir):
+        filename = os.path.join(in_dir, fname)
+        grid = np.zeros((insize, insize, insize))
+
+        with open(filename, "rb") as f:
+            small_grid = np.reshape(np.load(f), (insize, insize, insize))
+            for i in range(0, insize):
+                for j in range(0,insize):
+                    for k in range(0,insize):
+                        if small_grid[i,j,k] == 1:
+                            grid[i,j,k] = small_grid[i,j,k]
+                            break # stop at first z
+
+        filename = os.path.join(out_dir, fname)
+        with open(filename, "wb") as f:
+            np.save(f, grid)
+
         if "_0" in fname:
             # sanity check
-            s = outsize
+            s = insize
             xs = []
             ys = []
             zs = []
@@ -312,16 +432,20 @@ def convert_scale_dataset(from_path, to_path, insize, outsize):
 
             # plt.show() 
             plt.savefig(os.path.join(fig_path, fname.split(".")[0] + ".png"))   
-            plt.close() 
+            plt.close()
 
 
 if __name__ == '__main__':
     # create_dataset()
-    convert_scale_dataset("./3d-object-recognition/data-4/test", "./3d-object-recognition/data-16-scaled-4/", 4, 16)
-    
-    # sanity check on saved data
-    # s = 8
-    # train_path = "./3d-object-recognition/data-8/train/sphere_87"
+    # convert_scale_dataset("./3d-object-recognition/data-16/", "./3d-object-recognition/data-32-scaled-16/", 16, 32, "train")
+    # rename_set_files("./3d-object-recognition/data-32-plus-scaled/test", 0)
+    # convert_scaled_dataset_to_translation("./3d-object-recognition/data-16/", "./3d-object-recognition/data-32-scaled-16-translated/", 16, 32, "train")
+
+    get_visible_set("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-seen/", 32, "dev")
+
+    # # sanity check on saved data
+    # s = 32
+    # train_path = "./3d-object-recognition/data-32-scaled-16/test/cone_0"
     # f = open(train_path, "rb")
     # occ = np.load(f)
     # xs = []
