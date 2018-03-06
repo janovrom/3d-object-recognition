@@ -397,7 +397,61 @@ def get_visible_set(in_dir, out_dir, insize, subdir):
             small_grid = np.reshape(np.load(f), (insize, insize, insize))
             for i in range(0, insize):
                 for j in range(0,insize):
-                    for k in range(0,insize):
+                    for k in range(insize-1,-1,-1):
+                        if small_grid[i,j,k] == 1:
+                            grid[i,j,k] = small_grid[i,j,k]
+                            break # stop at first z
+
+        filename = os.path.join(out_dir, fname)
+        with open(filename, "wb") as f:
+            np.save(f, grid)
+
+        if "_0" in fname:
+            # sanity check
+            s = insize
+            xs = []
+            ys = []
+            zs = []
+            for i in range(0, s):
+                for j in range(0, s):
+                    for k in range(0, s):
+                        if grid[i,j,k] == 1:
+                            xs.append(i)
+                            ys.append(j)
+                            zs.append(k)
+
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(xs=xs, ys=ys, zs=zs, c=[0.1,0.1,0.1,0.2], marker='o')
+            ax.set_xlabel('X Label')
+            ax.set_ylabel('Y Label')
+            ax.set_zlabel('Z Label')
+            ax.set_xlim3d(0, s)
+            ax.set_ylim3d(0, s)
+            ax.set_zlim3d(0, s)
+
+            # plt.show() 
+            plt.savefig(os.path.join(fig_path, fname.split(".")[0] + ".png"))   
+            plt.close()
+
+
+def get_visible_set_sparse(in_dir, out_dir, insize, subdir, step):
+    fig_path = "./3d-object-recognition/figures/sparse-seen-" +str(step)
+    exists_and_create(fig_path)
+    exists_and_create(out_dir)
+    out_dir = os.path.join(out_dir, subdir)
+    in_dir = os.path.join(in_dir, subdir)
+    exists_and_create(out_dir)
+
+    for fname in os.listdir(in_dir):
+        filename = os.path.join(in_dir, fname)
+        grid = np.zeros((insize, insize, insize))
+
+        with open(filename, "rb") as f:
+            small_grid = np.reshape(np.load(f), (insize, insize, insize))
+            for i in range(0, insize,step):
+                for j in range(0,insize,step):
+                    for k in range(insize-1,-1,-1):
                         if small_grid[i,j,k] == 1:
                             grid[i,j,k] = small_grid[i,j,k]
                             break # stop at first z
@@ -440,8 +494,9 @@ if __name__ == '__main__':
     # convert_scale_dataset("./3d-object-recognition/data-16/", "./3d-object-recognition/data-32-scaled-16/", 16, 32, "train")
     # rename_set_files("./3d-object-recognition/data-32-plus-scaled/test", 0)
     # convert_scaled_dataset_to_translation("./3d-object-recognition/data-16/", "./3d-object-recognition/data-32-scaled-16-translated/", 16, 32, "train")
+    # get_visible_set("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-seen/", 32, "test")
 
-    get_visible_set("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-seen/", 32, "dev")
+    get_visible_set_sparse("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-sparse-seen/", 32, "test", 5)
 
     # # sanity check on saved data
     # s = 32
