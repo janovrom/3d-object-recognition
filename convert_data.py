@@ -217,7 +217,7 @@ def create_set(filename, outpath, inpath, insize):
             tris = rotatePoints(tris, eulerToMatrix([xrot,0,0]))
             mins, maxs = getAABB(tris)
             tris = np.transpose(tris)
-            tree = octree.Octree(tris, mins, maxs)
+            tree = octree.Octree(tris, mins, maxs, 4)
             X = np.array(tree.get_occlussion())
             # hash it to the regular grid
             mins, maxs = getAABB(np.transpose(X))
@@ -496,7 +496,7 @@ if __name__ == '__main__':
     # convert_scaled_dataset_to_translation("./3d-object-recognition/data-16/", "./3d-object-recognition/data-32-scaled-16-translated/", 16, 32, "train")
     # get_visible_set("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-seen/", 32, "test")
 
-    get_visible_set_sparse("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-sparse-seen/", 32, "test", 5)
+    # get_visible_set_sparse("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-sparse-seen/", 32, "test", 5)
 
     # # sanity check on saved data
     # s = 32
@@ -526,30 +526,47 @@ if __name__ == '__main__':
 
     # plt.show()     
 
-    # # sanity check on rotations
-    # tris = dl.load_off_file("./3d-object-recognition/objects/off/cone.off")
-    # tris = rotatePoints(tris, eulerToMatrix([0,80,0]))
-    # tris = rotatePoints(tris, eulerToMatrix([40,0,0]))
-    # mins, maxs = getAABB(tris)
-    # tris = np.transpose(tris)
-    # tree = octree.Octree(tris, mins, maxs)
+    # sanity check on rotations
+    L = 5
+    tris = dl.load_off_file("./3d-object-recognition/ModelNet-data/ModelNet10/sofa/test/sofa_0681.off")
+    mins, maxs = getAABB(tris)
+    tris = np.transpose(tris)
+    tree = octree.Octree(tris, mins, maxs, L)
 
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
 
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
+    X = np.array(tree.get_occlussion())
+    # hash it to the regular grid
+    mins, maxs = getAABB(np.transpose(X))
+    m = np.min(mins)
+    M = np.max(maxs)
+    insize = 2**L
+    X = (insize-1) * (X - mins) / (maxs - mins)
+    X = X.astype(int)
+    occ_grid = np.zeros((insize,insize,insize), dtype=np.int)
+    for i in range(0, X.shape[0]):
+        x, y, z = X[i,:]
+        occ_grid[x,y,z] = 1
+    s = insize
+    xs = []
+    ys = []
+    zs = []
+    for i in range(0, s):
+        for j in range(0, s):
+            for k in range(0, s):
+                if occ_grid[i,j,k] == 1:
+                    xs.append(i)
+                    ys.append(j)
+                    zs.append(k)
+    ax.scatter(xs, ys, zs, c='r', marker='s')
+    # plt.axis('equal')
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
 
-    # X = np.array(tree.get_occlussion())
-    # # print(X.shape)
-
-    # xs = X[:,0]
-    # ys = X[:,1]
-    # zs = X[:,2]
-    # ax.scatter(xs, ys, zs, c='r', marker='s')
-    # ax.set_xlabel('X Label')
-    # ax.set_ylabel('Y Label')
-    # ax.set_zlabel('Z Label')
-    # ax.set_xlim3d(-1, 1)
-    # ax.set_ylim3d(-1, 1)
-    # ax.set_zlim3d(-1, 1)
-
-    # plt.show()
+    ax.set_xlim3d(0, insize)
+    ax.set_ylim3d(0, insize)
+    ax.set_zlim3d(0, insize)
+    
+    plt.show()

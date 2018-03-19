@@ -23,9 +23,10 @@ class Octree():
 
     triplets = []
 
-    def __init__(self, tris, aabb_min, aabb_max):
+    def __init__(self, tris, aabb_min, aabb_max, max_level):
         self.tree_min = aabb_min
         self.tree_max = aabb_max
+        self.max_level = max_level
         self.root = OctreeNode() # just for root
         self.X = [] # list for occlussion
 
@@ -49,7 +50,7 @@ class Octree():
 
 
     def recursive_tree(self, node, tris, min_e, max_e, level):
-        if level == 3 or tris.shape[0] < 2:
+        if level == self.max_level or tris.shape[0] < 2:
             node.mark_as_leaf(tris)
             if tris.shape[0] > 0:
                 self.X.append(min_e)
