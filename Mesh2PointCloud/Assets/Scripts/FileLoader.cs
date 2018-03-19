@@ -34,7 +34,7 @@ public class FileLoader : MonoBehaviour {
                     float g = c.g;
                     float b = c.b;
 
-                    if (Mathf.Abs(a) < 0.001 && Mathf.Abs(r) < 0.001 && Mathf.Abs(g) < 0.001 && Mathf.Abs(b) < 0.001)
+                    if (Mathf.Abs(r) < 0.001 && Mathf.Abs(g) < 0.001 && Mathf.Abs(b) < 0.001)
                     {
                         continue;
                     }
