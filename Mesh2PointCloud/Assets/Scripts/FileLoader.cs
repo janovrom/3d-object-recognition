@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using UnityEngine;
 
 [ExecuteInEditMode]
@@ -22,32 +23,32 @@ public class FileLoader : MonoBehaviour {
     public void SavePoints(Color[] positions, int Width, int Height, string name)
     {
         // Convert texture to point cloud
-        using (StreamWriter writer = new StreamWriter(File.Create(Path.Combine(_outputDirectory, name))))
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < Width; ++i)
         {
-            for (int i = 0; i < Width; ++i)
+            for (int j = 0; j < Height; ++j)
             {
-                for (int j = 0; j < Height; ++j)
+                Color c = positions[j * Width + i];
+                float a = c.a;
+                float r = c.r;
+                float g = c.g;
+                float b = c.b;
+
+                if (Mathf.Abs(r) < 0.001 && Mathf.Abs(g) < 0.001 && Mathf.Abs(b) < 0.001)
                 {
-                    Color c = positions[j * Width + i];
-                    float a = c.a;
-                    float r = c.r;
-                    float g = c.g;
-                    float b = c.b;
-
-                    if (Mathf.Abs(r) < 0.001 && Mathf.Abs(g) < 0.001 && Mathf.Abs(b) < 0.001)
-                    {
-                        continue;
-                    }
-
-                    writer.Write(r);
-                    writer.Write(" ");
-                    writer.Write(g);
-                    writer.Write(" ");
-                    writer.Write(b);
-                    writer.Write("\n");
+                    continue;
                 }
+                sb.Append(r.ToString());
+                sb.Append(" ");
+                sb.Append(g.ToString());
+                sb.Append(" ");
+                sb.Append(b.ToString());
+                sb.Append("\n");
             }
         }
+        // If it has at least 200 points (multiplied by 6 because its 3dim
+        if (sb.Length > 1200)
+            File.WriteAllText(Path.Combine(_outputDirectory, name), sb.ToString());
     }
 
     public GameObject LoadMesh(string path)

@@ -177,7 +177,7 @@ class Net3D():
                 for j in range(dataset.num_mini_batches(data_dict)):
                     x,y = dataset.next_mini_batch(data_dict)
                     y_hot = convert_to_one_hot(y, dataset.num_classes)
-                    pred, acc = sess.run([pred_op, accuracy_op], feed_dict={X: x, Y: y_hot, keep_prob: 1})
+                    pred, acc, c = sess.run([pred_op, accuracy_op, cost], feed_dict={X: x, Y: y_hot, keep_prob: 1})
                     sum_acc += acc
                     sum_acc_argmax += np.sum(pred == y)
                 # write only last summary after mini batch
@@ -185,6 +185,7 @@ class Net3D():
                     writer.add_summary(summary, idx)
                 # print('Accuracy of %s at step %s: %s' % (msg, i, sum_acc / data_dict[dataset.NUMBER_EXAMPLES]))
                 print('Accuracy argmax of %s at step %s: %s' % (msg, idx, sum_acc_argmax / data_dict[dataset.NUMBER_EXAMPLES]))
+                return sum_acc_argmax / data_dict[dataset.NUMBER_EXAMPLES], c
 
 
             # run the training cycle
@@ -192,6 +193,8 @@ class Net3D():
                 # full trace for training summaries
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
+                accuracies = []
+                costs = []
 
                 for i in range(self.num_epochs):
                     # restart dataset for each of the sets
@@ -210,9 +213,29 @@ class Net3D():
                         train_writer.add_summary(summary, i * j + j)
 
                     if i % 2 == 0:  # Record summaries and train-set accuracy
-                        accuracy_test(self.dataset, self.dataset.train, train_writer, i, "train")
-                        accuracy_test(self.dataset, self.dataset.test, test_writer, i, "test")
-                        accuracy_test(self.dataset, self.dataset.dev, dev_writer, i, "dev")
+                        _, cc = accuracy_test(self.dataset, self.dataset.train, train_writer, i, "train")
+                        acc, _ = accuracy_test(self.dataset, self.dataset.test, test_writer, i, "test")
+                        accuracies.append(acc)
+                        costs.append(cc)
+                        # accuracy_test(self.dataset, self.dataset.dev, dev_writer, i, "dev")
+                        # plot and save training costs so you can decide whether to use barrier
+                        plt.figure(0)
+                        plt.plot(np.squeeze(costs))
+                        plt.ylabel("train costs")
+                        plt.xlabel("iterations")
+                        plt.title("Model "  + self.name)
+                        plt.savefig(os.path.join(log_dir, self.name + "-costs" + ".png"), bbox_inches='tight')
+                        # plot and save test accuracies so you can decide whether to use barrier
+                        plt.figure(1)
+                        plt.plot(np.squeeze(accuracies))
+                        plt.ylabel("test accuracies")
+                        plt.xlabel("iterations")
+                        plt.title("Model "  + self.name)
+                        # plt.show()
+                        plt.savefig(os.path.join(log_dir, self.name + "-accs" + ".png"), bbox_inches='tight')
+                        # do check for file barrier, if so, break training cycle
+                        if os.path.exists(os.path.join(log_dir, "barrier.txt")):
+                            break
                         print("##################################################")
             
             # save model
@@ -269,5 +292,5 @@ class Net3D():
 
 if __name__ == "__main__":
     # model = Net3D("Net3D-32-scaled", "./3d-object-recognition/data-32-plus-scaled")
-    model = Net3D("Net3D", "./3d-object-recognition/data-32-sparse-seen")
-    model.run_model(print_cost=True, load=True, train=False, show_activations=False)
+    model = Net3D("Net3D", "./3d-object-recognition/ModelNet-data")
+    model.run_model(print_cost=True, load=False, train=True, show_activations=False)

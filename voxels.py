@@ -5,11 +5,17 @@ from nn_template import *
 class Voxels(dataset_template):
 
     label_dict = {
-        "cube"      : 0,
-        "cone"      : 1,
-        "sphere"    : 2,
-        "torus"     : 3,
-        "cylinder"  : 4
+        "empty"         : 0,
+        "bathtub"       : 1,
+        "bed"           : 2,
+        "chair"         : 3,
+        "desk"          : 4,
+        "dresser"       : 5,
+        "monitor"       : 6,
+        "night-stand"   : 7,
+        "sofa"          : 8,
+        "table"         : 9,
+        "toilet"        : 10
     }
 
     def __load_dataset(self, path, data_dict):
@@ -87,7 +93,8 @@ class Voxels(dataset_template):
             filename = os.path.join(dataset[dataset_template.PATH], fname)
             with open(filename, "rb") as f:
                 data.append(np.reshape(np.load(f), self.shape))
-                labels.append(int(self.label_dict[os.path.basename(fname).split("_")[0]]))
+                n = os.path.basename(fname).split("_")[0]
+                labels.append(int(self.label_dict[n[0:n.rfind("-")]]))
 
         dataset[dataset_template.CURRENT_BATCH] += 1
         return np.array(data), np.array(labels)
@@ -98,4 +105,4 @@ class Voxels(dataset_template):
             if val == label:
                 return key
 
-        return ""
+        raise str(label) + " not recognized!"

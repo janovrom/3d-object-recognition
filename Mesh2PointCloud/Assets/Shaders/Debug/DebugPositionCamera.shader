@@ -1,10 +1,12 @@
 ﻿Shader "Debug/PositionCamera" {
 	SubShader{
 		Pass{
+		Cull Off
 		CGPROGRAM
 #pragma vertex vert
 #pragma fragment frag
 #include "UnityCG.cginc"
+
 
 		// vertex input: position, normal
 	struct appdata {

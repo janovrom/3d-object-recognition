@@ -189,6 +189,17 @@ def exists_and_create(datapath):
         os.chmod(datapath, 0o777)
 
 
+def create_segmentation_set(in_dir, out_dir):
+    for fname in os.listdir(in_dir):
+        in_file = os.path.join(in_dir, fname)
+        out_file = os.path.join(out_dir, os.path.basename(fname) + ".npy")
+
+        occ = dl.load_xyz_as_occlussion(in_file)
+        with open(out_file, "wb") as f:
+            np.save(f, occ)
+
+
+
 def create_set(filename, outpath, inpath, insize):
     print("Creating set for: " + filename)
 
@@ -489,7 +500,22 @@ def get_visible_set_sparse(in_dir, out_dir, insize, subdir, step):
             plt.close()
 
 
+def convert_model_net(modelnet_path, set_path, outpath):
+    outpath = os.path.join(outpath, set_path)
+    for fdir in os.listdir(modelnet_path):
+        for fname in os.listdir(os.path.join(modelnet_path, fdir, set_path)):
+            new_name = os.path.join(outpath, os.path.basename(fname))
+            new_name = new_name.replace("_", "-")
+            shutil.copy(os.path.join(modelnet_path, fdir, set_path, fname), new_name)
+
+
 if __name__ == '__main__':
+    # convert_model_net("./3d-object-recognition/ModelNet-data/ModelNet10", "train", "./3d-object-recognition/ModelNet-data/data-out")
+    # convert_model_net("./3d-object-recognition/ModelNet-data/ModelNet10", "test", "./3d-object-recognition/ModelNet-data/data-out")
+
+    # create_segmentation_set("E:/janovrom/ModelNet/test-data-out", "./3d-object-recognition/ModelNet-data/test")
+    create_segmentation_set("E:/janovrom/ModelNet/train-data-out", "./3d-object-recognition/ModelNet-data/train")
+
     # create_dataset()
     # convert_scale_dataset("./3d-object-recognition/data-16/", "./3d-object-recognition/data-32-scaled-16/", 16, 32, "train")
     # rename_set_files("./3d-object-recognition/data-32-plus-scaled/test", 0)
@@ -527,46 +553,46 @@ if __name__ == '__main__':
     # plt.show()     
 
     # sanity check on rotations
-    L = 5
-    tris = dl.load_off_file("./3d-object-recognition/ModelNet-data/ModelNet10/sofa/test/sofa_0681.off")
-    mins, maxs = getAABB(tris)
-    tris = np.transpose(tris)
-    tree = octree.Octree(tris, mins, maxs, L)
+    # L = 5
+    # tris = dl.load_off_file("./3d-object-recognition/ModelNet-data/ModelNet10/sofa/test/sofa_0681.off")
+    # mins, maxs = getAABB(tris)
+    # tris = np.transpose(tris)
+    # tree = octree.Octree(tris, mins, maxs, L)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
 
-    X = np.array(tree.get_occlussion())
-    # hash it to the regular grid
-    mins, maxs = getAABB(np.transpose(X))
-    m = np.min(mins)
-    M = np.max(maxs)
-    insize = 2**L
-    X = (insize-1) * (X - mins) / (maxs - mins)
-    X = X.astype(int)
-    occ_grid = np.zeros((insize,insize,insize), dtype=np.int)
-    for i in range(0, X.shape[0]):
-        x, y, z = X[i,:]
-        occ_grid[x,y,z] = 1
-    s = insize
-    xs = []
-    ys = []
-    zs = []
-    for i in range(0, s):
-        for j in range(0, s):
-            for k in range(0, s):
-                if occ_grid[i,j,k] == 1:
-                    xs.append(i)
-                    ys.append(j)
-                    zs.append(k)
-    ax.scatter(xs, ys, zs, c='r', marker='s')
-    # plt.axis('equal')
-    ax.set_xlabel('X Label')
-    ax.set_ylabel('Y Label')
-    ax.set_zlabel('Z Label')
+    # X = np.array(tree.get_occlussion())
+    # # hash it to the regular grid
+    # mins, maxs = getAABB(np.transpose(X))
+    # m = np.min(mins)
+    # M = np.max(maxs)
+    # insize = 2**L
+    # X = (insize-1) * (X - mins) / (maxs - mins)
+    # X = X.astype(int)
+    # occ_grid = np.zeros((insize,insize,insize), dtype=np.int)
+    # for i in range(0, X.shape[0]):
+    #     x, y, z = X[i,:]
+    #     occ_grid[x,y,z] = 1
+    # s = insize
+    # xs = []
+    # ys = []
+    # zs = []
+    # for i in range(0, s):
+    #     for j in range(0, s):
+    #         for k in range(0, s):
+    #             if occ_grid[i,j,k] == 1:
+    #                 xs.append(i)
+    #                 ys.append(j)
+    #                 zs.append(k)
+    # ax.scatter(xs, ys, zs, c='r', marker='s')
+    # # plt.axis('equal')
+    # ax.set_xlabel('X Label')
+    # ax.set_ylabel('Y Label')
+    # ax.set_zlabel('Z Label')
 
-    ax.set_xlim3d(0, insize)
-    ax.set_ylim3d(0, insize)
-    ax.set_zlim3d(0, insize)
+    # ax.set_xlim3d(0, insize)
+    # ax.set_ylim3d(0, insize)
+    # ax.set_zlim3d(0, insize)
     
-    plt.show()
+    # plt.show()

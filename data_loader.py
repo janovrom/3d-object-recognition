@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import segmentation_set as seg_set
 
 def load_off_file(filename):
     f = open(filename, "r")
@@ -84,3 +85,43 @@ def load_off_file_to_mesh(filename):
     mesh["indices"] = np.array(indices)
 
     return mesh
+
+
+def load_xyz_as_occlussion(filename, voxel_size=0.025, grid_size=32):
+    points = []
+    name = os.path.basename(filename).split("-")[0]
+    with open(filename, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            splitted = line.split(" ")
+            points.append(float(splitted[0]))
+            points.append(float(splitted[1]))
+            points.append(float(splitted[2]))
+
+    pointcloud = np.array(points) / 100
+    num_points = int(pointcloud.shape[0])
+    # Find point cloud min and max
+    min_x = np.min(pointcloud[0::3])
+    min_y = np.min(pointcloud[1::3])
+    min_z = np.min(pointcloud[2::3])
+    max_x = np.max(pointcloud[0::3])
+    max_y = np.max(pointcloud[1::3])
+    max_z = np.max(pointcloud[2::3])
+    # Compute sizes 
+    size_x = max_x - min_x
+    size_y = max_y - min_y
+    size_z = max_z - min_z
+    max_size = np.max([size_x, size_y, size_z])
+    print("%s has size=(%f, %f, %f) meters\n" % (os.path.basename(filename), size_x, size_y, size_z))
+    occupancy_grid = np.array(np.zeros((grid_size,grid_size,grid_size)), dtype=np.float32)
+
+    for i in range(0,num_points,3):
+        x = pointcloud[i+0]
+        y = pointcloud[i+1]
+        z = pointcloud[i+2]
+        idx_x = int((x - min_x) * (grid_size - 1) / max_size)
+        idx_y = int((y - min_y) * (grid_size - 1) / max_size)
+        idx_z = int((z - min_z) * (grid_size - 1) / max_size)
+        occupancy_grid[idx_x, idx_y, idx_z] = 1
+
+    return occupancy_grid

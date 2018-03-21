@@ -81,7 +81,8 @@ public class ScenarioControl : MonoBehaviour {
         // We have tangens and side "a", so compute minimum distance from object center, so it will be seen all
         _dist = r / _tan;
         // Move the camera
-        Camera.main.transform.position = Vector3.back * _dist;
+        Camera.main.transform.position = new Vector3(0.0f,1.0f,-1.0f).normalized * _dist;
+        Camera.main.transform.LookAt(_currentGameObject.transform);
         _finishedCurrentObject = false;
     }
 
@@ -101,25 +102,24 @@ public class ScenarioControl : MonoBehaviour {
             LoadObject();
         }
 
-        float rotX = 75.0f - 25.0f * i;
-        float rotY = j * 5.0f;
+        float rotY = j * 60.0f;
         // Apply transforms
-        _currentGameObject.transform.localRotation = Quaternion.Euler(rotX, rotY, 0.0f);
+        _currentGameObject.transform.localRotation = Quaternion.Euler(0.0f, rotY, 0.0f);
 
         // Increment state-rotation variables
         ++j;
-        if (j == 72)
+        if (j == 6)
         {
             j = 0;
             ++i;
-        }
-        // Finished rotating the object
-        if (i == 7)
-        {
             _finishedCurrentObject = true;
-            i = 0;
-            j = 0;
         }
+        //// Finished rotating the object
+        //if (i == 4)
+        //{
+        //    i = 0;
+        //    j = 0;
+        //}
     }
 
 	void OnPostRender() {
