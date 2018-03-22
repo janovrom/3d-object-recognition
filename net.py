@@ -1,3 +1,4 @@
+from timeit import default_timer as timer
 import tensorflow as tf 
 import numpy as np 
 import json
@@ -198,6 +199,7 @@ class Net3D():
                 costs = []
 
                 for i in range(self.num_epochs):
+                    starttime = timer()
                     # restart dataset for each of the sets
                     self.dataset.restart_mini_batches(self.dataset.train)
                     self.dataset.restart_mini_batches(self.dataset.test)
@@ -213,8 +215,9 @@ class Net3D():
                         # write only last summary after mini batch
                         train_writer.add_summary(summary, i * j + j)
                         print("\rTrain batch %d/%d" % (j, self.dataset.num_mini_batches(self.dataset.train)), end="")
-
-                    print("\n")
+                    duration = timer() - starttime
+                    print("")
+                    print("Epoch trained in " + str(duration))
 
                     if i % 2 == 0:  # Record summaries and train-set accuracy
                         acc_t, cc = accuracy_test(self.dataset, self.dataset.train, train_writer, i, "train")
