@@ -194,6 +194,7 @@ class Net3D():
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
                 accuracies = []
+                train_accuracies = []
                 costs = []
 
                 for i in range(self.num_epochs):
@@ -213,9 +214,10 @@ class Net3D():
                         train_writer.add_summary(summary, i * j + j)
 
                     if i % 2 == 0:  # Record summaries and train-set accuracy
-                        _, cc = accuracy_test(self.dataset, self.dataset.train, train_writer, i, "train")
+                        acc_t, cc = accuracy_test(self.dataset, self.dataset.train, train_writer, i, "train")
                         acc, _ = accuracy_test(self.dataset, self.dataset.test, test_writer, i, "test")
                         accuracies.append(acc)
+                        train_accuracies.append(acc_t)
                         costs.append(cc)
                         # accuracy_test(self.dataset, self.dataset.dev, dev_writer, i, "dev")
                         # plot and save training costs so you can decide whether to use barrier
@@ -227,12 +229,13 @@ class Net3D():
                         plt.savefig(os.path.join(log_dir, self.name + "-costs" + ".png"), bbox_inches='tight')
                         # plot and save test accuracies so you can decide whether to use barrier
                         plt.figure(1)
-                        plt.plot(np.squeeze(accuracies))
-                        plt.ylabel("test accuracies")
+                        plt.plot(np.squeeze(accuracies), "r")
+                        plt.ylabel("accuracies")
                         plt.xlabel("iterations")
                         plt.title("Model "  + self.name)
-                        # plt.show()
+                        plt.plot(np.squeeze(train_accuracies), "b")
                         plt.savefig(os.path.join(log_dir, self.name + "-accs" + ".png"), bbox_inches='tight')
+
                         # do check for file barrier, if so, break training cycle
                         if os.path.exists(os.path.join(log_dir, "barrier.txt")):
                             break
@@ -292,5 +295,5 @@ class Net3D():
 
 if __name__ == "__main__":
     # model = Net3D("Net3D-32-scaled", "./3d-object-recognition/data-32-plus-scaled")
-    model = Net3D("Net3D", "./3d-object-recognition/ModelNet-data")
-    model.run_model(print_cost=True, load=False, train=True, show_activations=False)
+    model = Net3D("Net3D-16", "./3d-object-recognition/ModelNet-data-16")
+    model.run_model(print_cost=True, load=True, train=True, show_activations=False)

@@ -1,6 +1,6 @@
 import os
 import numpy as np
-import segmentation_set as seg_set
+
 
 def load_off_file(filename):
     f = open(filename, "r")
@@ -98,7 +98,7 @@ def load_xyz_as_occlussion(filename, voxel_size=0.025, grid_size=32):
             points.append(float(splitted[1]))
             points.append(float(splitted[2]))
 
-    pointcloud = np.array(points) / 100
+    pointcloud = np.array(points)
     num_points = int(pointcloud.shape[0])
     # Find point cloud min and max
     min_x = np.min(pointcloud[0::3])

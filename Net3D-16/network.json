@@ -1,24 +1,24 @@
 {
     "params":
     {
-        "learning_rate" : 0.0001,
-        "num_epochs" : 30,
+        "learning_rate" : 0.00001,
+        "num_epochs" : 10,
         "l2_reg_weights" : 0.3,
         "l2_reg_biases" : 0.1,
-        "decay_step" : 1000,
+        "decay_step" : 10000,
         "decay_rate" : 0.96,
         "min_prob" : 0.0,
-        "keep_prob" : 0.45,
+        "keep_prob" : 0.75,
         "input_shape" : [16,16,16,1],
         "batch_size" : 16,
-        "num_classes" : 5
+        "num_classes" : 11
     },
 
     "layers":
     [
         {
             "name" : "conv0",
-            "filter" : [5,5,5,1,4],
+            "filter" : [3,3,3,1,64],
             "stride" : [1,1,1,1,1],
             "activation" : "relu",
             "padding" : "valid",
@@ -27,25 +27,78 @@
 
         {
             "name" : "conv1",
-            "filter" : [5,5,5,4,8],
+            "filter" : [3,3,3,64,64],
             "stride" : [1,1,1,1,1],
             "activation" : "relu",
             "padding" : "valid",
-            "dropout" : "yes",
-            "maxpool" : "yes"
+            "dropout" : "yes"
         },
 
         {
             "name" : "conv2",
-            "filter" : [4,4,4,8,16],
+            "filter" : [3,3,3,64,128],
             "stride" : [1,1,1,1,1],
             "activation" : "relu",
-            "padding" : "valid"
+            "padding" : "valid",
+            "dropout" : "yes"
         },
 
         {
             "name" : "conv3",
-            "filter" : [1,1,1,16,5],
+            "filter" : [3,3,3,128,128],
+            "stride" : [1,1,1,1,1],
+            "activation" : "relu",
+            "padding" : "valid",
+            "dropout" : "yes"
+        },
+
+        {
+            "name" : "conv4",
+            "filter" : [3,3,3,128,256],
+            "stride" : [1,1,1,1,1],
+            "activation" : "relu",
+            "padding" : "valid",
+            "dropout" : "yes"
+        },
+
+        {
+            "name" : "conv5",
+            "filter" : [3,3,3,256,256],
+            "stride" : [1,1,1,1,1],
+            "activation" : "relu",
+            "padding" : "valid",
+            "dropout" : "yes"
+        },
+
+        {
+            "name" : "conv6",
+            "filter" : [3,3,3,256,512],
+            "stride" : [1,1,1,1,1],
+            "activation" : "relu",
+            "padding" : "valid",
+            "dropout" : "yes"
+        },
+        
+        {
+            "name" : "conv7",
+            "filter" : [2,2,2,512,512],
+            "stride" : [1,1,1,1,1],
+            "activation" : "relu",
+            "padding" : "valid",
+            "dropout" : "yes"
+        },
+
+        {
+            "name" : "conv8",
+            "filter" : [1,1,1,512,256],
+            "stride" : [1,1,1,1,1],
+            "padding" : "valid",
+            "activation" : "relu"
+        },
+
+        {
+            "name" : "conv9",
+            "filter" : [1,1,1,256,11],
             "stride" : [1,1,1,1,1],
             "padding" : "valid"
         }

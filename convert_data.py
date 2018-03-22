@@ -189,12 +189,12 @@ def exists_and_create(datapath):
         os.chmod(datapath, 0o777)
 
 
-def create_segmentation_set(in_dir, out_dir):
+def create_segmentation_set(in_dir, out_dir, grid_size=32):
     for fname in os.listdir(in_dir):
         in_file = os.path.join(in_dir, fname)
         out_file = os.path.join(out_dir, os.path.basename(fname) + ".npy")
 
-        occ = dl.load_xyz_as_occlussion(in_file)
+        occ = dl.load_xyz_as_occlussion(in_file, grid_size=grid_size)
         with open(out_file, "wb") as f:
             np.save(f, occ)
 
@@ -513,8 +513,8 @@ if __name__ == '__main__':
     # convert_model_net("./3d-object-recognition/ModelNet-data/ModelNet10", "train", "./3d-object-recognition/ModelNet-data/data-out")
     # convert_model_net("./3d-object-recognition/ModelNet-data/ModelNet10", "test", "./3d-object-recognition/ModelNet-data/data-out")
 
-    # create_segmentation_set("E:/janovrom/ModelNet/test-data-out", "./3d-object-recognition/ModelNet-data/test")
-    create_segmentation_set("E:/janovrom/ModelNet/train-data-out", "./3d-object-recognition/ModelNet-data/train")
+    create_segmentation_set("D:/janovrom/Data/test-data-out", "./3d-object-recognition/ModelNet-data-16/test", grid_size=16)
+    create_segmentation_set("D:/janovrom/Data/train-data-out", "./3d-object-recognition/ModelNet-data-16/train", grid_size=16)
 
     # create_dataset()
     # convert_scale_dataset("./3d-object-recognition/data-16/", "./3d-object-recognition/data-32-scaled-16/", 16, 32, "train")
