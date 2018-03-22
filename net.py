@@ -212,6 +212,9 @@ class Net3D():
                               run_metadata=run_metadata)
                         # write only last summary after mini batch
                         train_writer.add_summary(summary, i * j + j)
+                        print("\rTrain batch %d/%d" % (j, self.dataset.num_mini_batches(self.dataset.train)), end="")
+
+                    print("\n")
 
                     if i % 2 == 0:  # Record summaries and train-set accuracy
                         acc_t, cc = accuracy_test(self.dataset, self.dataset.train, train_writer, i, "train")
@@ -296,4 +299,4 @@ class Net3D():
 if __name__ == "__main__":
     # model = Net3D("Net3D-32-scaled", "./3d-object-recognition/data-32-plus-scaled")
     model = Net3D("Net3D-16", "./3d-object-recognition/ModelNet-data-16")
-    model.run_model(print_cost=True, load=True, train=True, show_activations=False)
+    model.run_model(print_cost=True, load=False, train=True, show_activations=False)
