@@ -212,6 +212,9 @@ class Net3D():
                               run_metadata=run_metadata)
                         # write only last summary after mini batch
                         train_writer.add_summary(summary, i * j + j)
+                        print("\rTrain batch %d/%d" % (j, self.dataset.num_mini_batches(self.dataset.train)), end="")
+
+                    print("\n")
 
                     if i % 2 == 0:  # Record summaries and train-set accuracy
                         acc_t, cc = accuracy_test(self.dataset, self.dataset.train, train_writer, i, "train")

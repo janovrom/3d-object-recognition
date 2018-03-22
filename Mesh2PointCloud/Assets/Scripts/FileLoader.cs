@@ -24,9 +24,9 @@ public class FileLoader : MonoBehaviour {
     {
         // Convert texture to point cloud
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < Width; ++i)
+        for (int j = 0; j < Height; ++j)
         {
-            for (int j = 0; j < Height; ++j)
+            for (int i = 0; i < Width; ++i)
             {
                 Color c = positions[j * Width + i];
                 float a = c.a;
