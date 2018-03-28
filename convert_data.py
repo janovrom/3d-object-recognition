@@ -514,7 +514,7 @@ if __name__ == '__main__':
     # convert_model_net("./3d-object-recognition/ModelNet-data/ModelNet10", "test", "./3d-object-recognition/ModelNet-data/data-out")
 
     # create_segmentation_set("D:/janovrom/Data/test-data-out", "./3d-object-recognition/ModelNet-data/test", grid_size=32)
-    create_segmentation_set("E:/janovrom/ModelNet/train-data-out", "./3d-object-recognition/ModelNet-data/train", grid_size=32)
+    create_segmentation_set("E:/janovrom/ModelNet/train-data-out", "./ModelNet-data-large-train/train", grid_size=32)
 
     # create_dataset()
     # convert_scale_dataset("./3d-object-recognition/data-16/", "./3d-object-recognition/data-32-scaled-16/", 16, 32, "train")
