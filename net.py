@@ -68,8 +68,8 @@ class Net3D():
                         Z = Z + b
                         if "activation" in l and l["activation"].lower() == "relu":
                             Z = tf.nn.relu(Z)
-                        elif "activation" in l and l["activation"].lower() == "selu":
-                            Z = tf.nn.selu(Z)
+                        elif "activation" in l and l["activation"].lower() == "elu":
+                            Z = tf.nn.elu(Z)
                         elif "activation" in l and l["activation"].lower() == "softplus":
                             Z = tf.nn.softplus(Z)
                         elif "activation" in l and l["activation"].lower() == "softsign":
@@ -301,5 +301,5 @@ class Net3D():
 
 if __name__ == "__main__":
     # model = Net3D("Net3D-32-scaled", "./3d-object-recognition/data-32-plus-scaled")
-    model = Net3D("Net3D-16", "./3d-object-recognition/ModelNet-data-16")
-    model.run_model(print_cost=True, load=False, train=True, show_activations=False)
+    model = Net3D("Net3D-64", "./3d-object-recognition/ModelNet-data-64")
+    model.run_model(print_cost=True, load=True, train=True, show_activations=False)
