@@ -1,0 +1,65 @@
+{
+    "params":
+    {
+        "learning_rate" : 0.001,
+        "num_epochs" : 20,
+        "l2_reg_weights" : 0.3,
+        "l2_reg_biases" : 0.1,
+        "decay_step" : 10000,
+        "decay_rate" : 0.96,
+        "min_prob" : 0.65,
+        "keep_prob" : 0.55,
+        "input_shape" : [32,32,32,1],
+        "batch_size" : 64,
+        "num_classes" : 11
+    },
+
+    "layers":
+    [
+        {
+            "name" : "conv0",
+            "filter" : [5,5,5,1,16],
+            "stride" : [1,1,1,1,1],
+            "activation" : "relu",
+            "padding" : "same",
+            "dropout" : "yes",
+            "maxpool" : "yes"
+        },
+
+        {
+            "name" : "conv1",
+            "filter" : [5,5,5,16,32],
+            "stride" : [1,1,1,1,1],
+            "activation" : "relu",
+            "padding" : "same",
+            "dropout" : "yes",
+            "maxpool" : "yes"
+        },
+
+        {
+            "name" : "conv2",
+            "filter" : [5,5,5,32,64],
+            "stride" : [1,1,1,1,1],
+            "activation" : "relu",
+            "padding" : "same",
+            "dropout" : "yes",
+            "maxpool" : "yes"
+        },
+
+        {
+            "name" : "conv3",
+            "filter" : [4,4,4,64,64],
+            "stride" : [1,1,1,1,1],
+            "activation" : "relu",
+            "padding" : "valid"
+        },
+
+        {
+            "name" : "conv4",
+            "filter" : [1,1,1,64,11],
+            "stride" : [1,1,1,1,1],
+            "padding" : "valid"
+        }
+    ]
+
+}
