@@ -125,3 +125,51 @@ def load_xyz_as_occlussion(filename, voxel_size=0.025, grid_size=32):
         occupancy_grid[idx_x, idx_y, idx_z] = 1
 
     return occupancy_grid
+
+def load_xyz_as_density(filename, grid_size=32, normalize=False):
+    points = []
+    name = os.path.basename(filename).split("-")[0]
+    with open(filename, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            splitted = line.split(" ")
+            points.append(float(splitted[0]))
+            points.append(float(splitted[1]))
+            points.append(float(splitted[2]))
+
+    pointcloud = np.array(points)
+    num_points = int(pointcloud.shape[0])
+    # Find point cloud min and max
+    min_x = np.min(pointcloud[0::3])
+    min_y = np.min(pointcloud[1::3])
+    min_z = np.min(pointcloud[2::3])
+    max_x = np.max(pointcloud[0::3])
+    max_y = np.max(pointcloud[1::3])
+    max_z = np.max(pointcloud[2::3])
+    # Compute sizes 
+    size_x = max_x - min_x
+    size_y = max_y - min_y
+    size_z = max_z - min_z
+    max_size = np.max([size_x, size_y, size_z])
+    # print("%s has size=(%f, %f, %f) meters\n" % (os.path.basename(filename), size_x, size_y, size_z))
+    density_grid = np.array(np.zeros((grid_size,grid_size,grid_size)), dtype=np.float32)
+    ox = min_x - (max_size - size_x) / 2
+    oy = min_y - (max_size - size_y) / 2
+    oz = min_z - (max_size - size_z) / 2
+    for i in range(0,num_points,3):
+        x = pointcloud[i+0]
+        y = pointcloud[i+1]
+        z = pointcloud[i+2]
+        idx_x = int((x - ox) * (grid_size - 1) / max_size)
+        idx_y = int((y - oy) * (grid_size - 1) / max_size)
+        idx_z = int((z - oz) * (grid_size - 1) / max_size)
+        density_grid[idx_x, idx_y, idx_z] = density_grid[idx_x, idx_y, idx_z] + 1
+
+    # sanity check
+    g_max = np.max(density_grid)
+    if normalize:
+        density_grid = density_grid / g_max
+
+    print("sanity check. density maximum " + str(g_max))
+
+    return density_grid    
