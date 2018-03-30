@@ -301,15 +301,6 @@ class Net3D():
 
 if __name__ == "__main__":
     # model = Net3D("Net3D-32-scaled", "./3d-object-recognition/data-32-plus-scaled")
-<<<<<<< HEAD
     model = Net3D("Net3D", "./3d-object-recognition/ModelNet-data-density")
     model.run_model(print_cost=True, load=True, train=True, show_activations=False)
-=======
-<<<<<<< HEAD
-    model = Net3D("Net3D", "./3d-object-recognition/ModelNet-data-large-train")
-    model.run_model(print_cost=True, load=False, train=True, show_activations=False)
-=======
-    model = Net3D("Net3D-16", "./3d-object-recognition/ModelNet-data-16")
-    model.run_model(print_cost=True, load=True, train=True, show_activations=False)
->>>>>>> a222a83c7bae98dc83da2ccb75183a522c8375a9
->>>>>>> c0060bf9414999d9420528113d7e48f3d11796b1
+
