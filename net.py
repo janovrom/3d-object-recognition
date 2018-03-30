@@ -9,7 +9,7 @@ from voxels import Voxels
 
 class Net3D():
 
-    def create_placeholders(self, n_H0, n_W0, n_C0, n_y):
+    def create_placeholders(self, n_H0, n_W0, n_C0, n_y, n_d):
         '''
         Creates input placeholders for labels, input and descriptor matrix. 
 
@@ -24,7 +24,7 @@ class Net3D():
         '''
 
         with tf.name_scope("input_placeholders"):
-            X = tf.placeholder(dtype=tf.float32, shape=(None, n_H0, n_W0, n_C0, 1), name="input_voxel")
+            X = tf.placeholder(dtype=tf.float32, shape=(None, n_H0, n_W0, n_C0, n_d), name="input_voxel")
             Y = tf.placeholder(dtype=tf.float32, shape=(None, n_y), name="input_label")
             keep_prob = tf.placeholder(dtype=tf.float32, name="keep_probability")
 
@@ -139,9 +139,9 @@ class Net3D():
         log_dir = os.path.join("./3d-object-recognition", self.name)
 
         tf.reset_default_graph()
-        m, n_H0, n_W0, n_C0 = self.dataset.input_shape(self.dataset.train)
+        m, n_H0, n_W0, n_C0, n_d = self.dataset.input_shape(self.dataset.train)
         n_y = self.dataset.num_classes
-        X, Y, keep_prob = self.create_placeholders(n_H0, n_W0, n_C0, n_y)
+        X, Y, keep_prob = self.create_placeholders(n_H0, n_W0, n_C0, n_y, n_d)
         Zl, Ws = self.forward_propagation(X, keep_prob, os.path.join(log_dir, "network.json"))
         cost = self.compute_cost(Zl, Y)
         pred_op, accuracy_op = self.compute_predictions(Zl, Y)
@@ -214,7 +214,7 @@ class Net3D():
                               run_metadata=run_metadata)
                         # write only last summary after mini batch
                         train_writer.add_summary(summary, i * j + j)
-                        print("\rTrain batch %d/%d" % (j, self.dataset.num_mini_batches(self.dataset.train)), end="")
+                        print("\rTrain batch %d/%d" % ((j+1), self.dataset.num_mini_batches(self.dataset.train)), end="")
                     duration = timer() - starttime
                     print("")
                     print("Epoch trained in " + str(duration))
@@ -301,6 +301,6 @@ class Net3D():
 
 if __name__ == "__main__":
     # model = Net3D("Net3D-32-scaled", "./3d-object-recognition/data-32-plus-scaled")
-    model = Net3D("Net3D", "./3d-object-recognition/ModelNet-data-density")
-    model.run_model(print_cost=True, load=True, train=True, show_activations=False)
+    model = Net3D("Net3D", "./3d-object-recognition/ModelNet-data-mean")
+    model.run_model(print_cost=True, load=False, train=True, show_activations=False)
 

@@ -57,7 +57,7 @@ class dataset_template:
 
 
     def input_shape(self, dataset):
-        return dataset[dataset_template.NUMBER_EXAMPLES], self.shape[0], self.shape[1], self.shape[2]
+        return dataset[dataset_template.NUMBER_EXAMPLES], self.shape[0], self.shape[1], self.shape[2], self.shape[3]
 
 
     def num_mini_batches(self, dataset):
