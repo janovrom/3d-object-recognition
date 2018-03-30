@@ -8,9 +8,13 @@
         "decay_step" : 10000,
         "decay_rate" : 0.96,
         "min_prob" : 0.65,
-        "keep_prob" : 0.55,
+        "keep_prob" : 0.65,
         "input_shape" : [32,32,32,1],
+<<<<<<< HEAD
         "batch_size" : 64,
+=======
+        "batch_size" : 16,
+>>>>>>> c0060bf9414999d9420528113d7e48f3d11796b1
         "num_classes" : 11
     },
 
@@ -18,45 +22,111 @@
     [
         {
             "name" : "conv0",
-            "filter" : [5,5,5,1,16],
+            "filter" : [3,3,3,1,64],
             "stride" : [1,1,1,1,1],
+<<<<<<< HEAD
             "activation" : "relu",
             "padding" : "same",
             "dropout" : "yes",
             "maxpool" : "yes"
+=======
+            "activation" : "softsign",
+            "padding" : "valid",
+            "dropout" : "yes"
+>>>>>>> c0060bf9414999d9420528113d7e48f3d11796b1
         },
 
         {
             "name" : "conv1",
-            "filter" : [5,5,5,16,32],
+            "filter" : [3,3,3,64,64],
             "stride" : [1,1,1,1,1],
+<<<<<<< HEAD
             "activation" : "relu",
             "padding" : "same",
+=======
+            "activation" : "softsign",
+            "padding" : "valid",
+>>>>>>> c0060bf9414999d9420528113d7e48f3d11796b1
             "dropout" : "yes",
             "maxpool" : "yes"
         },
-
+        
         {
             "name" : "conv2",
-            "filter" : [5,5,5,32,64],
+            "filter" : [3,3,3,64,128],
             "stride" : [1,1,1,1,1],
+<<<<<<< HEAD
             "activation" : "relu",
             "padding" : "same",
             "dropout" : "yes",
             "maxpool" : "yes"
+=======
+            "activation" : "softsign",
+            "padding" : "valid",
+            "dropout" : "yes"
+>>>>>>> c0060bf9414999d9420528113d7e48f3d11796b1
         },
 
         {
             "name" : "conv3",
-            "filter" : [4,4,4,64,64],
+            "filter" : [3,3,3,128,128],
             "stride" : [1,1,1,1,1],
+<<<<<<< HEAD
             "activation" : "relu",
             "padding" : "valid"
+=======
+            "activation" : "softsign",
+            "padding" : "valid",
+            "dropout" : "yes"
+>>>>>>> c0060bf9414999d9420528113d7e48f3d11796b1
         },
 
         {
             "name" : "conv4",
-            "filter" : [1,1,1,64,11],
+            "filter" : [3,3,3,128,256],
+            "stride" : [1,1,1,1,1],
+            "activation" : "softsign",
+            "padding" : "valid",
+            "dropout" : "yes"
+        },
+
+        {
+            "name" : "conv5",
+            "filter" : [3,3,3,256,256],
+            "stride" : [1,1,1,1,1],
+            "activation" : "softsign",
+            "padding" : "valid",
+            "dropout" : "yes"
+        },
+
+        {
+            "name" : "conv6",
+            "filter" : [3,3,3,256,512],
+            "stride" : [1,1,1,1,1],
+            "activation" : "softsign",
+            "padding" : "valid",
+            "dropout" : "yes"
+        },
+
+        {
+            "name" : "conv7",
+            "filter" : [3,3,3,512,512],
+            "stride" : [1,1,1,1,1],
+            "activation" : "softsign",
+            "padding" : "valid"
+        },
+
+        {
+            "name" : "conv8",
+            "filter" : [2,2,2,512,256],
+            "stride" : [1,1,1,1,1],
+            "activation" : "softsign",
+            "padding" : "valid"
+        },
+
+        {
+            "name" : "conv9",
+            "filter" : [1,1,1,256,11],
             "stride" : [1,1,1,1,1],
             "padding" : "valid"
         }
