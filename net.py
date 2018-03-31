@@ -76,6 +76,8 @@ class Net3D():
                             Z = tf.nn.softsign(Z)
                         elif "activation" in l and l["activation"].lower() == "crelu":
                             Z = tf.nn.crelu(Z)
+                        elif "activation" in l and l["activation"].lower() == "tanh":
+                            Z = tf.nn.tanh(Z)
                         elif "activation" not in l:
                             pass
                         else:
@@ -301,6 +303,6 @@ class Net3D():
 
 if __name__ == "__main__":
     # model = Net3D("Net3D-32-scaled", "./3d-object-recognition/data-32-plus-scaled")
-    model = Net3D("Net3D", "./3d-object-recognition/ModelNet-data-mean")
-    model.run_model(print_cost=True, load=False, train=True, show_activations=False)
+    model = Net3D("Net3D", "./3d-object-recognition/ModelNet-data-mean-norm")
+    model.run_model(print_cost=True, load=True, train=True, show_activations=False)
 
