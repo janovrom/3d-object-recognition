@@ -1,11 +1,7 @@
 {
     "params":
     {
-<<<<<<< HEAD
-        "learning_rate" : 0.00001,
-=======
         "learning_rate" : 0.001,
->>>>>>> efacbfe992109cac8dfc3f47cbc98931c61e270a
         "num_epochs" : 20,
         "l2_reg_weights" : 0.1,
         "l2_reg_biases" : 0.1,
@@ -22,7 +18,7 @@
     [
         {
             "name" : "conv0",
-            "filter" : [3,3,3,3,32],
+            "filter" : [3,3,3,1,32],
             "stride" : [1,1,1,1,1],
             "activation" : "relu",
             "padding" : "same",
