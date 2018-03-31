@@ -564,6 +564,34 @@ def create_mean_set(in_dir, out_dir, grid_size=32, normalize=False):
     p.join()        
 
 
+def create_and_save_var(files, in_dir, out_dir, grid_size, normalize):
+    for fname in files:
+        in_file = os.path.join(in_dir, fname)
+        out_file = os.path.join(out_dir, os.path.basename(fname) + ".npy")
+
+        occ = dl.load_xyz_as_variance(in_file, grid_size=grid_size, normalize=normalize)
+        with open(out_file, "wb") as f:
+            np.save(f, occ)
+
+
+def create_var_set(in_dir, out_dir, grid_size=32, normalize=False):
+    fnames = os.listdir(in_dir)
+    count_per_thread = int(np.floor(len(fnames) / 8))
+    f1 = fnames[0:count_per_thread]
+    f2 = fnames[1*count_per_thread:2*count_per_thread]
+    f3 = fnames[2*count_per_thread:3*count_per_thread]
+    f4 = fnames[3*count_per_thread:4*count_per_thread]
+    f5 = fnames[4*count_per_thread:5*count_per_thread]
+    f6 = fnames[5*count_per_thread:6*count_per_thread]
+    f7 = fnames[6*count_per_thread:7*count_per_thread]
+    f8 = fnames[7*count_per_thread:len(fnames)]    
+
+    p = Pool(8)
+    p.map(partial(create_and_save_var, in_dir=in_dir, out_dir=out_dir, normalize=normalize, grid_size=grid_size), [f1,f2,f3,f4,f5,f6,f7,f8])
+    p.close()
+    p.join() 
+
+
 if __name__ == '__main__':
     # convert_model_net("./3d-object-recognition/ModelNet-data/ModelNet10", "train", "./3d-object-recognition/ModelNet-data/data-out")
     # convert_model_net("./3d-object-recognition/ModelNet-data/ModelNet10", "test", "./3d-object-recognition/ModelNet-data/data-out")
@@ -574,8 +602,8 @@ if __name__ == '__main__':
     # create_density_set("D:/janovrom/Data/test-data-out", "./3d-object-recognition/ModelNet-data-density/test", grid_size=32)
     # create_density_set("D:/janovrom/Data/train-data-out", "./3d-object-recognition/ModelNet-data-density/train", grid_size=32)
 
-    create_mean_set("E:/janovrom/ModelNet/test-data-out", "./3d-object-recognition/ModelNet-data-mean-norm/test", grid_size=32, normalize=True)
-    create_mean_set("E:/janovrom/ModelNet/train-data-out", "./3d-object-recognition/ModelNet-data-mean-norm/train", grid_size=32, normalize=True)
+    create_var_set("D:/janovrom/ModelNet/test-data-out", "./3d-object-recognition/ModelNet-data-var/test", grid_size=32, normalize=True)
+    create_var_set("D:/janovrom/ModelNet/train-data-out", "./3d-object-recognition/ModelNet-data-var/train", grid_size=32, normalize=True)
 
     # create_dataset()
     # convert_scale_dataset("./3d-object-recognition/data-16/", "./3d-object-recognition/data-32-scaled-16/", 16, 32, "train")
@@ -584,7 +612,7 @@ if __name__ == '__main__':
     # get_visible_set("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-seen/", 32, "test")
 
     # get_visible_set_sparse("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-sparse-seen/", 32, "test", 5)
-
+    
     # # sanity check on saved data
     with open("E:\\janovrom\\Python\\3d-object-recognition\\ModelNet-data\\test\\sofa-0688_3690.xyz.npy", "rb") as f:
         occ = np.load(f)
