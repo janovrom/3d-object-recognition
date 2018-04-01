@@ -136,7 +136,7 @@ class Net3D():
         return arg_max_prob, accuracy_op
 
 
-    def run_model (self, print_cost=True, load=False, train=True, show_activations=False):
+    def run_model (self, print_cost=True, load=False, train=True, show_activations=False, save_misclass=True):
         # initialize some commonly used variables
         log_dir = os.path.join("./3d-object-recognition", self.name)
 
@@ -177,12 +177,26 @@ class Net3D():
                 dataset.restart_mini_batches(data_dict)
                 sum_acc = 0
                 sum_acc_argmax = 0
+                misclassified = []
+                mis_label = []
                 for j in range(dataset.num_mini_batches(data_dict)):
-                    x,y = dataset.next_mini_batch(data_dict)
+                    x,y,n = dataset.next_mini_batch(data_dict)
                     y_hot = convert_to_one_hot(y, dataset.num_classes)
                     pred, acc, c = sess.run([pred_op, accuracy_op, cost], feed_dict={X: x, Y: y_hot, keep_prob: 1})
                     sum_acc += acc
                     sum_acc_argmax += np.sum(pred == y)
+                    if save_misclass:
+                        for i in range(0, pred.shape[0]):
+                            if pred[i] != y[i]:
+                                misclassified.append(n[i])
+                                mis_label.append(dataset.label_to_name(pred[i]))
+                
+                if save_misclass:
+                    with open(os.path.join(log_dir, "misclassification.txt"), "w") as f:
+                        for i in range(0, len(misclassified)):
+                            f.write("%s %s\n" % (misclassified[i], mis_label[i]))
+                        print("Misclassifications saved in %s.\n" % (os.path.join(log_dir, "misclassification.txt")))
+                
                 # write only last summary after mini batch
                 if summary:
                     writer.add_summary(summary, idx)
@@ -208,7 +222,7 @@ class Net3D():
                     self.dataset.restart_mini_batches(self.dataset.dev)
 
                     for j in range(self.dataset.num_mini_batches(self.dataset.train)):
-                        x,y = self.dataset.next_mini_batch(self.dataset.train)
+                        x,y,_ = self.dataset.next_mini_batch(self.dataset.train)
                         y = convert_to_one_hot(y, self.dataset.num_classes)
                         # train and get summary
                         summary, _ = sess.run([summary_op, train_op], feed_dict={X: x, Y: y, keep_prob: self.keep_prob},
@@ -304,5 +318,5 @@ class Net3D():
 if __name__ == "__main__":
     # model = Net3D("Net3D-32-scaled", "./3d-object-recognition/data-32-plus-scaled")
     model = Net3D("Net3D", "./3d-object-recognition/ModelNet-data")
-    model.run_model(print_cost=True, load=False, train=True, show_activations=False)
+    model.run_model(print_cost=True, load=True, train=False, show_activations=False, save_misclass=True)
 

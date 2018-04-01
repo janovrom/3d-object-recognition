@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import os
 from matplotlib.colors import LinearSegmentedColormap
+import data_loader as dl
 
 
 def display_stimuli(stimuli, size):
@@ -162,5 +163,55 @@ def invert_grayscale(mnist_digits):
     return 1-mnist_digits
 
 
+def display_misclassification(filename, data_path, orig_path, grid_size=32, display_all=False):
+    lines = []
+    with open(filename, "r") as f:
+        lines = f.readlines()
+
+    missed_files = []
+    i = 1
+    for line in lines:
+        print("\rMisclassification %d/%d" % (i, len(lines)))
+        i = i + 1
+        splitted = line.split(" ")
+        fname = splitted[0]
+        miss = splitted[1]
+        
+        clean_name = fname.split("_")[0]
+
+        if clean_name not in missed_files:
+            missed_files.append(clean_name)
+
+        if display_all:
+            xs,ys,zs,vs = dl.load_occ(os.path.join(data_path, fname), grid_size=grid_size)
+
+            fig = plt.figure(fname + " misclassified as " + miss)
+            ax = fig.add_subplot(121, projection='3d')
+            cm = LinearSegmentedColormap.from_list("alpha", [(0.0,0.0,0.0,0.0), (1.0,0.0,0.0,1.0)])
+            ax.scatter(xs, ys, zs, c=[1.0, 0.0, 0.0, 0.5], marker='p')
+            # ax.scatter(xs, ys, zs, vs, c=vs, cmap=cm, marker='p')
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            ax.set_zlabel('Z')
+            ax.set_xlim3d(0, grid_size)
+            ax.set_ylim3d(0, grid_size)
+            ax.set_zlim3d(0, grid_size)
+
+            xs, ys, zs = dl.load_xyz(os.path.join(orig_path, fname.split(".")[0]+".xyz"))
+            ax2 = fig.add_subplot(122, projection='3d')
+            ax2.scatter(xs, ys, zs, c=[1.0, 0.0, 0.0, 0.1], marker='p')
+            # ax2.scatter(xs, ys, zs, vs, c=vs, cmap=cm, marker='p')
+            ax2.set_xlabel('X')
+            ax2.set_ylabel('Y')
+            ax2.set_zlabel('Z')
+
+
+            plt.show()  
+
+    print(len(missed_files))
+
+    return missed_files
+
+
 if "__main__" == __name__:
-    conv3d_plot()
+    display_misclassification("./3d-object-recognition/Net3d/misclassification.txt", "./3d-object-recognition/ModelNet-data/test", "E:/janovrom/ModelNet/test-data-out", display_all=True)

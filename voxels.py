@@ -86,6 +86,7 @@ class Voxels(dataset_template):
     def next_mini_batch(self, dataset):
         data = []
         labels = []
+        names = []
         start = dataset[dataset_template.CURRENT_BATCH] * self.batch_size
         end = min(dataset[dataset_template.NUMBER_EXAMPLES], start + self.batch_size)
 
@@ -95,9 +96,10 @@ class Voxels(dataset_template):
                 data.append(np.reshape(np.load(f), self.shape))
                 n = os.path.basename(fname).split("_")[0]
                 labels.append(int(self.label_dict[n[0:n.rfind("-")]]))
+                names.append(fname)
 
         dataset[dataset_template.CURRENT_BATCH] += 1
-        return np.array(data), np.array(labels)
+        return np.array(data), np.array(labels), np.array(names)
 
 
     def label_to_name(self, label):

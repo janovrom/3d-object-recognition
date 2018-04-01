@@ -10,7 +10,7 @@
         "min_prob" : 0.65,
         "keep_prob" : 0.55,
         "input_shape" : [32,32,32,1],
-        "batch_size" : 32,
+        "batch_size" : 64,
         "num_classes" : 11
     },
 
@@ -22,8 +22,7 @@
             "stride" : [1,1,1,1,1],
             "activation" : "relu",
             "padding" : "same",
-            "dropout" : "yes",
-            "maxpool" : "yes"
+            "dropout" : "yes"
         },
 
         {
@@ -32,7 +31,8 @@
             "stride" : [1,1,1,1,1],
             "activation" : "relu",
             "padding" : "same",
-            "dropout" : "yes"
+            "dropout" : "yes",
+            "maxpool" : "yes"
         },
 
         {
@@ -41,8 +41,7 @@
             "stride" : [1,1,1,1,1],
             "activation" : "relu",
             "padding" : "same",
-            "dropout" : "yes",
-            "maxpool" : "yes"
+            "dropout" : "yes"
         },
 
         {
@@ -51,12 +50,22 @@
             "stride" : [1,1,1,1,1],
             "activation" : "relu",
             "padding" : "same",
-            "dropout" : "yes"
+            "dropout" : "yes",
+            "maxpool" : "yes"
         },
 
         {
             "name" : "conv4",
             "filter" : [3,3,3,64,128],
+            "stride" : [1,1,1,1,1],
+            "activation" : "relu",
+            "padding" : "same",
+            "dropout" : "yes"
+        },
+
+        {
+            "name" : "conv4mp",
+            "filter" : [3,3,3,128,128],
             "stride" : [1,1,1,1,1],
             "activation" : "relu",
             "padding" : "same",
@@ -66,7 +75,7 @@
 
         {
             "name" : "conv5",
-            "filter" : [4,4,4,128,256],
+            "filter" : [4,4,4,128,1024],
             "stride" : [1,1,1,1,1],
             "activation" : "relu",
             "padding" : "valid"
@@ -74,7 +83,7 @@
 
         {
             "name" : "conv6",
-            "filter" : [1,1,1,256,512],
+            "filter" : [1,1,1,1024,1024],
             "stride" : [1,1,1,1,1],
             "activation" : "relu",
             "padding" : "valid"
@@ -82,7 +91,7 @@
 
         {
             "name" : "conv7",
-            "filter" : [1,1,1,512,11],
+            "filter" : [1,1,1,1024,11],
             "stride" : [1,1,1,1,1],
             "padding" : "valid"
         }

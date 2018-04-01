@@ -235,6 +235,40 @@ def load_xyz_as_mean(filename, grid_size=32, normalize=False):
     return mean_grid  
 
 
+def load_occ(filename, grid_size=32):
+    with open(filename, "rb") as f:
+        occ = np.load(f)
+        xs = []
+        ys = []
+        zs = []
+        vs = []
+        for i in range(0, grid_size):
+            for j in range(0, grid_size):
+                for k in range(0, grid_size):
+                    if occ[i,j,k] > 0:
+                        xs.append(i)
+                        ys.append(j)
+                        zs.append(k)
+                        vs.append(occ[i,j,k])
+
+    return xs, ys, zs, vs
+
+
+def load_xyz(filename):
+    xs = []
+    ys = []
+    zs = []
+    with open(filename, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            splitted = line.split(" ")
+            xs.append(float(splitted[0]))
+            ys.append(float(splitted[1]))
+            zs.append(float(splitted[2]))
+
+    return xs, ys, zs
+
+
 def load_xyz_as_variance(filename, grid_size=32, normalize=False):
     points = []
     name = os.path.basename(filename).split("-")[0]
