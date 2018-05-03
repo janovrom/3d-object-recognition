@@ -317,6 +317,6 @@ class Net3D():
 
 if __name__ == "__main__":
     # model = Net3D("Net3D-32-scaled", "./3d-object-recognition/data-32-plus-scaled")
-    model = Net3D("Net3D", "./3d-object-recognition/ModelNet-data")
-    model.run_model(print_cost=True, load=True, train=False, show_activations=False, save_misclass=True)
+    model = Net3D("Net3D-engine", "./3d-object-recognition/Engine-data")
+    model.run_model(print_cost=True, load=False, train=True, show_activations=False, save_misclass=True)
 

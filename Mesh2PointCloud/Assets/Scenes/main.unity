@@ -204,7 +204,7 @@ RectTransform:
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 912097993}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -529, y: 284, z: 0}
+  m_LocalPosition: {x: -532, y: 289, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children:
   - {fileID: 1136205013}
@@ -459,6 +459,13 @@ MonoBehaviour:
   CameraPositionMaterial: {fileID: 2100000, guid: 49f9a27df13625d4a9f82552b31d172c,
     type: 2}
   GuiScreenTexture: {fileID: 883521251}
+  ScenarioValues:
+    StartRotationY: 0
+    StartRotationX: 25
+    RotationStepY: 30
+    RotationStepX: 25
+    StopStepY: 12
+    StopStepX: 3
 --- !u!1 &1107073197
 GameObject:
   m_ObjectHideFlags: 0
@@ -764,7 +771,7 @@ RectTransform:
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 1977194542}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 569, y: 299, z: 0}
+  m_LocalPosition: {x: 572, y: 304, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children:
   - {fileID: 883521250}

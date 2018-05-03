@@ -596,14 +596,15 @@ if __name__ == '__main__':
     # convert_model_net("./3d-object-recognition/ModelNet-data/ModelNet10", "train", "./3d-object-recognition/ModelNet-data/data-out")
     # convert_model_net("./3d-object-recognition/ModelNet-data/ModelNet10", "test", "./3d-object-recognition/ModelNet-data/data-out")
 
-    # create_segmentation_set("E:/janovrom/ModelNet/test-data-out", "./3d-object-recognition/ModelNet-data/test", grid_size=32)
-    # create_segmentation_set("E:/janovrom/ModelNet/train-data-out", "./3d-object-recognition/ModelNet-data/train", grid_size=32)
+    # create_segmentation_set("E:/janovrom/Engine/test-data-out", "./3d-object-recognition/Engine-data-32/test", grid_size=32)
+    # create_segmentation_set("E:/janovrom/Engine/train-data-out", "./3d-object-recognition/Engine-data-32/train", grid_size=32)
+    # create_segmentation_set("E:/janovrom/Engine/dev-data-out", "./3d-object-recognition/Engine-data-32/dev", grid_size=32)
 
     # create_density_set("D:/janovrom/Data/test-data-out", "./3d-object-recognition/ModelNet-data-density/test", grid_size=32)
     # create_density_set("D:/janovrom/Data/train-data-out", "./3d-object-recognition/ModelNet-data-density/train", grid_size=32)
 
-    create_var_set("D:/janovrom/ModelNet/test-data-out", "./3d-object-recognition/ModelNet-data-var/test", grid_size=32, normalize=True)
-    create_var_set("D:/janovrom/ModelNet/train-data-out", "./3d-object-recognition/ModelNet-data-var/train", grid_size=32, normalize=True)
+    # create_var_set("D:/janovrom/ModelNet/test-data-out", "./3d-object-recognition/ModelNet-data-var/test", grid_size=32, normalize=True)
+    # create_var_set("D:/janovrom/ModelNet/train-data-out", "./3d-object-recognition/ModelNet-data-var/train", grid_size=32, normalize=True)
 
     # create_dataset()
     # convert_scale_dataset("./3d-object-recognition/data-16/", "./3d-object-recognition/data-32-scaled-16/", 16, 32, "train")
@@ -612,35 +613,36 @@ if __name__ == '__main__':
     # get_visible_set("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-seen/", 32, "test")
 
     # get_visible_set_sparse("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-sparse-seen/", 32, "test", 5)
-    
-    # # sanity check on saved data
-    with open("E:\\janovrom\\Python\\3d-object-recognition\\ModelNet-data\\test\\sofa-0688_3690.xyz.npy", "rb") as f:
-        occ = np.load(f)
-        s = 32
-        xs = []
-        ys = []
-        zs = []
-        vs = []
-        for i in range(0, s):
-            for j in range(0, s):
-                for k in range(0, s):
-                    if occ[i,j,k] > 0:
-                        xs.append(i)
-                        ys.append(j)
-                        zs.append(k)
-                        vs.append(occ[i,j,k])
+    # sanity check on saved data
+    for i in range(0,72):
+        if os.path.exists("E:\\janovrom\\Python\\3d-object-recognition\\Engine-data\\train\\spring-retainer_%d.xyz.npy" % (i+792)):
+            with open("E:\\janovrom\\Python\\3d-object-recognition\\Engine-data\\test\\lower-frame_697.xyz.npy", "rb") as f:
+                occ = np.load(f)
+                s = 32
+                xs = []
+                ys = []
+                zs = []
+                vs = []
+                for i in range(0, s):
+                    for j in range(0, s):
+                        for k in range(0, s):
+                            if occ[i,j,k] > 0:
+                                xs.append(i)
+                                ys.append(j)
+                                zs.append(k)
+                                vs.append(occ[i,j,k])
 
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        cm = LinearSegmentedColormap.from_list("alpha", [(0.0,0.0,0.0,0.0), (1.0,0.0,0.0,1.0)])
-        ax.scatter(xs, ys, zs, c=[1.0, 0.0, 0.0, 0.1], marker='p')
-        # ax.scatter(xs, ys, zs, vs, c=vs, cmap=cm, marker='p')
-        ax.set_xlabel('X Label')
-        ax.set_ylabel('Y Label')
-        ax.set_zlabel('Z Label')
-        ax.set_xlim3d(0, s)
-        ax.set_ylim3d(0, s)
-        ax.set_zlim3d(0, s)
+                fig = plt.figure()
+                ax = fig.add_subplot(111, projection='3d')
+                cm = LinearSegmentedColormap.from_list("alpha", [(0.0,0.0,0.0,0.0), (1.0,0.0,0.0,1.0)])
+                ax.scatter(xs, ys, zs, c=[1.0, 0.0, 0.0, 0.8], marker='p')
+                # ax.scatter(xs, ys, zs, vs, c=vs, cmap=cm, marker='p')
+                ax.set_xlabel('X Label')
+                ax.set_ylabel('Y Label')
+                ax.set_zlabel('Z Label')
+                ax.set_xlim3d(0, s)
+                ax.set_ylim3d(0, s)
+                ax.set_zlim3d(0, s)
 
-        plt.show()     
+                plt.show()     

@@ -71,6 +71,10 @@ public class FileLoader : MonoBehaviour {
         int header_size = 2;
         Vector3[] vertices = new Vector3[numVertices];
         int[] indices = new int[numFaces * 3];
+        Vector3 center = Vector3.zero;
+        Vector3 min, max;
+        min = Vector3.zero;
+        max = Vector3.zero;
 
         // Read vertices
         for (int i = header_size; i < numVertices + header_size; ++i)
@@ -92,7 +96,28 @@ public class FileLoader : MonoBehaviour {
             Debug.Assert(success, "Couldn't parse " + (i - 2).ToString() + " vertex!");
 
             vertices[i - 2] = new Vector3(x, y, z);
+            min = Vector3.Min(min, vertices[i - 2]);
+            max = Vector3.Max(max, vertices[i - 2]);
         }
+
+        center = (max - min) / 2.0f + min;
+        float maxSqDist = 0;
+
+        // Normalize vertices
+        for (int i = 0; i < vertices.Length; ++i)
+        {
+            // Center it and compute distance
+            vertices[i] = vertices[i] - center;
+            if (maxSqDist < vertices[i].sqrMagnitude)
+                maxSqDist = vertices[i].sqrMagnitude;
+        }
+        // Divide centered vertices by maximum distance
+        float maxDist = Mathf.Sqrt(maxSqDist);
+        for (int i = 0; i < vertices.Length; ++i)
+        {
+            vertices[i] = vertices[i] / maxDist;
+        }
+
 
         // Read indices
         for (int i = numVertices + header_size; i < numVertices + header_size + numFaces; ++i)

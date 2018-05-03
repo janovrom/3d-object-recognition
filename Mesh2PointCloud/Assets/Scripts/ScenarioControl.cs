@@ -27,6 +27,8 @@ public class ScenarioControl : MonoBehaviour {
     private int j = 0;
     private int _dataIdx = 0;
 
+    public Scenario ScenarioValues;
+
 
     private void LoadObjectsNames()
     {
@@ -48,6 +50,10 @@ public class ScenarioControl : MonoBehaviour {
 
 	// Use this for initialization
 	void Start () {
+        // Load json scenario
+        string jsonString = File.ReadAllText(Path.Combine(Directory.GetCurrentDirectory(), "scenario.json"));
+        ScenarioValues = JsonUtility.FromJson<Scenario>(jsonString);
+
         Screen.SetResolution(Width, Height, false);
         // Create render texture as big as screen
         ScreenTexture = new RenderTexture(Width, Height, 16, RenderTextureFormat.ARGBFloat);
@@ -100,8 +106,8 @@ public class ScenarioControl : MonoBehaviour {
             LoadObject();
         }
 
-        float rotY = j * 30.0f;
-        float rotX = 25.0f + i * 20.0f;
+        float rotY = ScenarioValues.StartRotationY + j * ScenarioValues.RotationStepY;
+        float rotX = ScenarioValues.StartRotationX + i * ScenarioValues.RotationStepX;
         // Apply transforms
         _currentGameObject.transform.localRotation = Quaternion.Euler(0.0f, rotY, 0.0f);
 
@@ -113,13 +119,13 @@ public class ScenarioControl : MonoBehaviour {
 
         // Increment state-rotation variables
         ++j;
-        if (j == 12)
+        if (j >= ScenarioValues.StopStepY)
         {
             j = 0;
             ++i;
         }
         // Finished rotating the object
-        if (i == 3)
+        if (i >= ScenarioValues.StopStepX)
         {
             i = 0;
             j = 0;
