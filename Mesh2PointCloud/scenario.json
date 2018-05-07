@@ -1,0 +1,8 @@
+{
+    "StartRotationY": 0.0,
+    "StartRotationX": -60.0,
+    "RotationStepY": 30.0,
+    "RotationStepX": 20.0,
+    "StopStepY": 12,
+    "StopStepX": 6
+}
