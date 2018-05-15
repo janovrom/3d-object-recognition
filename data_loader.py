@@ -373,3 +373,79 @@ def load_xyzl(filename):
             labels_grid[idx_x, idx_y, idx_z] = labels[int(i/3)]
 
     return occupancy_grid, labels_grid, np.nonzero(occupancy_grid)
+
+
+def load_xyzl_oct(filename, n_y):
+    # generate two grids - 16x16x16 coarse grid for indexing
+    # and 256x256x256 finer grid where each voxel represents cube 2x2x2 cm
+    points = []
+    labels = []
+    name = os.path.basename(filename).split("-")[0]
+    with open(filename, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            splitted = line.split(" ")
+            points.append(-float(splitted[0]))
+            points.append(float(splitted[1]))
+            points.append(float(splitted[2]))
+            labels.append(math.log2(float(splitted[3])))
+
+    pointcloud = np.array(points)
+    num_points = int(pointcloud.shape[0])
+    # size is 512x512x512 cm for this grid and maximal grid is 256x256x256 voxels
+    index_grid = np.array(np.zeros((16,16,16)), dtype=np.object)
+    label_grid = np.array(np.zeros((16,16,16)), dtype=np.object)
+    indices = []
+
+    for i in range(0,num_points,3):
+        x = pointcloud[i+0]
+        y = pointcloud[i+1]
+        z = pointcloud[i+2]
+        # every 2cm is a voxel, 0,0,0 is at (159,63,0) 
+        idx_x = int(100.0 * x / 16.0) + 8
+        idx_y = int(100.0 * y / 16.0) + 8
+        idx_z = int(100.0 * z / 16.0)
+        if idx_x >= 0 and idx_x < 16 and idx_y >= 0 and idx_y < 16 and idx_z >= 0 and idx_z < 16:
+            if not index_grid[idx_x, idx_y, idx_z]:
+                index_grid[idx_x, idx_y, idx_z] = []
+                label_grid[idx_x, idx_y, idx_z] = []
+                indices.append((idx_x, idx_y, idx_z))
+
+            label_grid[idx_x, idx_y, idx_z].append(labels[int(i/3)])
+            index_grid[idx_x, idx_y, idx_z].append(x)
+            index_grid[idx_x, idx_y, idx_z].append(y)
+            index_grid[idx_x, idx_y, idx_z].append(z)
+    
+    # generate lists of subgrids and its histogram for labels
+    sub_grids = []
+    sub_label = np.zeros((len(indices), n_y))
+    for i in range(0, len(indices)):
+        index = indices[i]
+        points = np.array(index_grid[index[0],index[1],index[2]])
+        labels = label_grid[index[0],index[1],index[2]]
+        # Find point cloud min and max
+        min_x = np.min(points[0::3])
+        min_y = np.min(points[1::3])
+        min_z = np.min(points[2::3])
+        max_x = np.max(points[0::3])
+        max_y = np.max(points[1::3])
+        max_z = np.max(points[2::3])
+        hist = np.array(np.zeros((n_y,)), dtype=np.float)
+        sub_grid = np.array(np.zeros((16,16,16)), dtype=np.float)
+        for j in range(0,len(labels)):
+            x = points[3*j+0] - min_x
+            y = points[3*j+1] - min_y
+            z = points[3*j+2] - min_z
+            l = round(labels[j])
+            hist[l] = hist[l] + 1
+            # compute indices
+            idx_x = int(x / 16.0)
+            idx_y = int(y / 16.0)
+            idx_z = int(z / 16.0)
+            sub_grid[idx_x, idx_y, idx_z] = 1
+        
+        hist = hist / np.linalg.norm(hist)
+        sub_label[i,:] = hist
+        sub_grids.append(sub_grid)
+
+    return np.array(sub_grids), sub_label
