@@ -1,4 +1,5 @@
 import os
+import math
 import numpy as np
 
 
@@ -325,3 +326,50 @@ def load_xyz_as_variance(filename, grid_size=32, normalize=False):
     print("sanity check. var maximum " + str(np.max(var_grid)))
 
     return var_grid  
+
+
+def load_xyzl(filename):
+    points = []
+    labels = []
+    name = os.path.basename(filename).split("-")[0]
+    with open(filename, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            splitted = line.split(" ")
+            points.append(-float(splitted[0]))
+            points.append(float(splitted[1]))
+            points.append(float(splitted[2]))
+            labels.append(math.log2(float(splitted[3])))
+
+    pointcloud = np.array(points)
+    num_points = int(pointcloud.shape[0])
+    # Find point cloud min and max
+    min_x = np.min(pointcloud[0::3])
+    min_y = np.min(pointcloud[1::3])
+    min_z = np.min(pointcloud[2::3])
+    max_x = np.max(pointcloud[0::3])
+    max_y = np.max(pointcloud[1::3])
+    max_z = np.max(pointcloud[2::3])
+    # Compute sizes 
+    size_x = max_x - min_x
+    size_y = max_y - min_y
+    size_z = max_z - min_z
+    
+    print("%s has size=(%f, %f, %f) meters" % (os.path.basename(filename), size_x, size_y, size_z))
+    occupancy_grid = np.array(np.zeros((320,128,192)), dtype=np.float32)
+    labels_grid = np.array(-np.ones((320,128,192)), dtype=np.float32)
+
+    for i in range(0,num_points,3):
+        x = pointcloud[i+0]
+        y = pointcloud[i+1]
+        z = pointcloud[i+2]
+        # every 2cm is a voxel, 0,0,0 is at (159,63,0) 
+        idx_x = int(100.0 * x / 2.0) + 159
+        idx_y = int(100.0 * y / 2.0) + 63
+        idx_z = int(100.0 * z / 2.0)
+        # add padding of 7
+        if idx_x >= 7 and idx_x < 313 and idx_y >= 7 and idx_y < 121 and idx_z >= 7 and idx_z < 185:
+            occupancy_grid[idx_x, idx_y, idx_z] = 1
+            labels_grid[idx_x, idx_y, idx_z] = labels[int(i/3)]
+
+    return occupancy_grid, labels_grid, np.nonzero(occupancy_grid)

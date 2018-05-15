@@ -5,13 +5,17 @@ import os
 from nn_utils import *
 from segmentation_set import Segmentations
 import sys
+import time
+import matplotlib.pyplot as plt
 
 
 class SegmentationNet():
 
     def create_placeholders(self, n_y):
-        X = tf.placeholder(dtype=tf.float32, shape=(1, 15,15,15, 1), name="input_grid")
-        Y = tf.placeholder(dtype=tf.int32, shape=(1, n_y), name="input_labels")
+        X = tf.placeholder(dtype=tf.float32, shape=(None,15,15,15,1), name="input_grid")
+        # X = tf.placeholder(dtype=tf.float32, shape=(1,320,128,192,1), name="input_grid")
+        Y = tf.placeholder(dtype=tf.float32, shape=(None,n_y), name="input_distributions")
+        # Y = tf.placeholder(dtype=tf.int32, shape=(1,320,128,192,1), name="input_labels")
 
         return X, Y
 
@@ -24,7 +28,7 @@ class SegmentationNet():
         return filter
 
     
-    def convolution(self, X, shape, strides=[1,1,1,1,1], padding="VALID", act=tf.nn.relu):
+    def convolution(self, X, shape, strides=[1,1,1,1,1], padding="SAME", act=tf.nn.relu):
         W = tf.get_variable("weights" + str(self.layer_idx), shape, initializer=tf.contrib.layers.xavier_initializer(), dtype=tf.float32)
         b = tf.get_variable("biases" + str(self.layer_idx), shape[-1], initializer=tf.zeros_initializer(), dtype=tf.float32)
         Z = tf.nn.conv3d(X, W, strides=strides, padding=padding) + b
@@ -36,62 +40,39 @@ class SegmentationNet():
 
 
     def deconvolution(self, X, shape, out_shape, act=tf.nn.relu):
-        Z = tf.layers.conv3d_transpose(X, shape[-2], shape[0:3], strides=[1,1,1], padding="VALID", activation=act, kernel_initializer=tf.constant_initializer(self.upsample_filter()))
+        Z = tf.layers.conv3d_transpose(X, shape[-2], shape[0:3], name="deconv"+ str(self.layer_idx), strides=[1,1,1], padding="VALID", activation=act, trainable=False, kernel_initializer=tf.constant_initializer(self.upsample_filter()))
 
         self.layer_idx = self.layer_idx + 1
         print(Z)
         return Z
 
 
-    def forward_propagation(self, X, n_y):
+    def forward_propagation_fv(self, X, n_y):
         self.layer_idx = 0
-        # conv1 from 32x32x32 to 16x16x16
-        Z = self.convolution(X, [5,5,5,1,16], padding="SAME")
-        Z = tf.nn.max_pool3d(Z, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID")
-        # conv2 from 13x13x13 to 11x11x11
-        Z = self.convolution(Z, [3,3,3,64,64])
-        # conv3 from 11x11x11 to 9x9x9
-        Z = self.convolution(Z, [3,3,3,64,128])
+        # imagine that the net operates over 16x16x16 blocks
+        # IN 15, OUT 11
+        A0 = self.convolution(X, [5,5,5,1,32], padding="VALID")
+        # IN 11, OUT 7
+        A1 = self.convolution(A0, [5,5,5,32,64], padding="VALID")
+        # IN 7, OUT 5
+        A2 = self.convolution(A1, [3,3,3,64,128], padding="VALID")
+        # IN 5, OUT 3
+        A3 = self.convolution(A2, [3,3,3,128,128], padding="VALID")
+        # IN 3, OUT 1
+        A4 = self.convolution(A3, [3,3,3,128,256], padding="VALID")
+        A_fv = self.convolution(A4, [1,1,1,256,512], padding="VALID")
+        A_class = self.convolution(A_fv, [1,1,1,512,n_y], act=None)
 
-        # # conv4 from 9x9x9 to 7x7x7
-        # Z = self.convolution(Z, [3,3,3,128,128])
-        # # conv5 from 7x7x7 to 5x5x5
-        # Z = self.convolution(Z, [3,3,3,128,256])
-        # # conv6 from 5x5x5 to 3x3x3
-        # Z = self.convolution(Z, [3,3,3,256,256])
-        # # conv7 from 3x3x3 to 1x1x1
-        # Z = self.convolution(Z, [3,3,3,256,512])
-
-        # FC part
-        Z = self.convolution(Z, [1,1,1,128,512])
-        Z = self.convolution(Z, [1,1,1,512,512])
-
-        # do classification part
-        Z_classif = self.convolution(Z, [1,1,1,512,256])
-        Z_classif = tf.contrib.layers.flatten(self.convolution(Z_classif, [1,1,1,256,n_y], act=None))
-
-        # self.layer_idx = 0
-        # d = Z.shape[1]
-        # w = Z.shape[2]
-        # h = Z.shape[3]
-        # Z = self.deconvolution(Z, [3,3,3,256,512], [1,d+2,w+2,h+2,256])
-        # Z = self.deconvolution(Z, [3,3,3,256,256], [1,d+4,w+4,h+4,256])
-        # Z = self.deconvolution(Z, [3,3,3,128,256], [1,d+6,w+6,h+6,128])
-        # Z = self.deconvolution(Z, [3,3,3,128,128], [1,d+8,w+8,h+8,128])
-        # Z = self.deconvolution(Z, [3,3,3,64,128],  [1,d+10,w+10,h+10,64])
-        # Z = self.deconvolution(Z, [3,3,3,64,64],   [1,d+12,w+12,h+12,64])
-        # Z_seg = self.deconvolution(Z, [3,3,3,1,64],[1,d+14,w+14,h+14,1], act=None)
-
-        return Z_classif#, Z_seg
+        return A_fv, A_class
 
 
-    def compute_cost(self, Z, Y):
-        return tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=Z, labels=Y))
+    def compute_cost_fv(self, Z, Y, n_y):
+        return tf.norm(Y-Z) # compute norm
 
 
     def compute_predictions(self, Zl, Y):
         softmax = tf.nn.softmax(logits=Zl)
-        return tf.argmax(softmax, axis=1)
+        return tf.argmax(softmax, axis=-1)
 
 
     def run_model(self):
@@ -99,12 +80,12 @@ class SegmentationNet():
         tf.reset_default_graph()
         n_y = self.dataset.num_classes
         X, Y = self.create_placeholders(n_y)
-        Z_classif = self.forward_propagation(X, n_y)
-        cost = self.compute_cost(Z_classif, Y)
-        pred_op = self.compute_predictions(Z_classif, Y)
+        A_fv, Z_class = self.forward_propagation_fv(X, n_y)
+        cost = self.compute_cost_fv(Z_class, Y, n_y)
+        # pred_op = self.compute_predictions(Z_classif, Y)
 
         step = tf.Variable(0, trainable=False, name="global_step")
-        lr_dec = tf.train.exponential_decay(0.001, step, 10000, 0.96, staircase=True)
+        lr_dec = tf.train.exponential_decay(self.lr, step, 10000, 0.96)
         optimizer = tf.train.AdamOptimizer(learning_rate=lr_dec)
         gvs = optimizer.compute_gradients(cost)
         capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
@@ -116,40 +97,67 @@ class SegmentationNet():
             acc = 0
             dataset.restart_mini_batches(data_dict)
             for j in range(dataset.num_mini_batches(data_dict)):
-                x,y = dataset.next_mini_batch(data_dict)
-                y_hot = convert_to_one_hot(y, dataset.num_classes)
-                pred,zcl = sess.run([pred_op,Z_classif], feed_dict={X: x, Y: y_hot})
-                # print(zcl)
-                # print(pred)
-                # print(y)
-                # sys.stdin.read(1)
-                if pred == y:
-                    acc = acc + 1
+                x,y,i = dataset.next_mini_batch(data_dict)
+                pred = sess.run([pred_op], feed_dict={X: x, Y: y})
+                print(pred.shape)
+                acc = acc + np.count_nonzero(pred!=y)
 
             return float(acc / data_dict[dataset.NUMBER_EXAMPLES])
 
-
-        with tf.Session() as sess:
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        with tf.Session(config=config) as sess:
             sess.run(init)
 
+            costs = []
             for epoch in range(0, self.num_epochs):
                 self.dataset.restart_mini_batches(self.dataset.train)
                 self.dataset.restart_mini_batches(self.dataset.dev)
                 self.dataset.restart_mini_batches(self.dataset.test)
                 cc = 0
-                for j in range(self.dataset.num_mini_batches(self.dataset.train)):
-                    x,y = self.dataset.next_mini_batch(self.dataset.train)
-                    y_hot = convert_to_one_hot(y, self.dataset.num_classes)
-                    cc = sess.run([train_op], feed_dict={X: x, Y: y_hot})
+                stime = time.time()
+                batches = self.dataset.num_mini_batches(self.dataset.train)
+                for j in range(batches):
+                    batch_stime = time.time()
+                    x,y,idxs = self.dataset.next_mini_batch(self.dataset.train)
+                    print("\rBatch loaded in %f" % (time.time() - batch_stime))
+                    sub_batches = 32
+                    for j in range(0, idxs[0].shape[0],sub_batches):
+                        batch = []
+                        blabs = []
+                        m = min(idxs[0].shape[0] - j, sub_batches)
+                        for k in range(j, j+m):
+                            xi = idxs[0][k]
+                            yi = idxs[1][k]
+                            zi = idxs[2][k]
+                            batch.append(x[0,xi-7:xi+8,yi-7:yi+8,zi-7:zi+8])
+                            blab = y[0,xi-7:xi+8,yi-7:yi+8,zi-7:zi+8]
+                            y_hat, _ = np.histogram(blab.flatten(), [0,1,2,3,4,5,6,7,8,9])
+                            if x[0,xi,yi,zi] != 1:
+                                raise Exception("Some weird shit happened - index for zero occupancy")
 
-                acc_train = accuracy_test(self.dataset, self.dataset.train)
-                acc_test = accuracy_test(self.dataset, self.dataset.test)
-                acc_dev = accuracy_test(self.dataset, self.dataset.dev)
+                            if sum(y_hat) == 0:
+                                raise Exception("another weird shit happened - there are no labels")
+                            y_hat = y_hat / np.linalg.norm(y_hat)
+                            blabs.append(y_hat)
+
+                        _,c = sess.run([train_op,cost], feed_dict={X: np.array(batch), Y: np.array(blabs)})
+                        cc = cc + c
+                    print("\rBatch trained in %f" % (time.time() - batch_stime))
+
+                costs.append(cc / (batches*idxs[0].shape[0]))
+                print("\nEpoch trained in %f" % (time.time() - stime))
                 
-                print("Train/Dev/Test accuracies %f/%f/%f" %(acc_train, acc_dev, acc_test))
+
+                # acc_train = accuracy_test(self.dataset, self.dataset.train)
+                # acc_test = accuracy_test(self.dataset, self.dataset.test)
+                # acc_dev = accuracy_test(self.dataset, self.dataset.dev)
+                
+                # print("Train/Dev/Test accuracies %f/%f/%f" %(acc_train, acc_dev, acc_test))
                 print("epoch %d" %(epoch+1))
 
-
+            plt.plot(np.squeeze(np.array(costs)))
+            plt.show()
             # save model
             save_path = tf.train.Saver().save(sess, os.path.join(log_dir, self.name + ".ckpt"))
             print("Model saved in file: %s" % save_path)
@@ -173,5 +181,5 @@ class SegmentationNet():
 
 
 if __name__ == "__main__":
-    s = SegmentationNet("SegNet", "./3d-object-recognition/Engine-data-15")
+    s = SegmentationNet("SegNet", "./3d-object-recognition/SegData")
     s.run_model()

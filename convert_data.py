@@ -614,35 +614,38 @@ if __name__ == '__main__':
 
     # get_visible_set_sparse("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-sparse-seen/", 32, "test", 5)
     # sanity check on saved data
-    for i in range(0,72):
-        if os.path.exists("E:\\janovrom\\Python\\3d-object-recognition\\Engine-data\\train\\spring-retainer_%d.xyz.npy" % (i+792)):
-            with open("E:\\janovrom\\Python\\3d-object-recognition\\Engine-data\\test\\lower-frame_697.xyz.npy", "rb") as f:
-                occ = np.load(f)
-                s = 32
-                xs = []
-                ys = []
-                zs = []
-                vs = []
-                for i in range(0, s):
-                    for j in range(0, s):
-                        for k in range(0, s):
-                            if occ[i,j,k] > 0:
-                                xs.append(i)
-                                ys.append(j)
-                                zs.append(k)
-                                vs.append(occ[i,j,k])
+    occ,lab = dl.load_xyzl("D:\\janovrom\\Unity\\ModelChodby\\data-out\\low-res\\data00000000.xyzl")
+    xs = []
+    ys = []
+    zs = []
+    vs = []
+    xs.append(0)
+    ys.append(0)
+    zs.append(0)
+    vs.append(0)
+    for i in range(0, 320):
+        for j in range(0, 128):
+            for k in range(0, 192):
+                if occ[i,j,k] > 0:
+                    xs.append(i)
+                    ys.append(j)
+                    zs.append(k)
+                    vs.append(math.log2(lab[i,j,k]))
 
+    xs.append(0)
+    ys.append(0)
+    zs.append(0)
+    vs.append(8)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    cm = LinearSegmentedColormap.from_list("alpha", [(0.0,0.0,0.0,0.0), (1.0,0.0,0.0,1.0)])
+    # ax.scatter(xs, ys, zs, c=[1.0, 0.0, 0.0, 0.8], marker='p')
+    ax.scatter(xs, ys, zs, c=vs, cmap=plt.get_cmap("Set1"), marker='p')
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+    ax.set_xlim3d(0, 320)
+    ax.set_ylim3d(0, 128)
+    ax.set_zlim3d(0, 192)
 
-                fig = plt.figure()
-                ax = fig.add_subplot(111, projection='3d')
-                cm = LinearSegmentedColormap.from_list("alpha", [(0.0,0.0,0.0,0.0), (1.0,0.0,0.0,1.0)])
-                ax.scatter(xs, ys, zs, c=[1.0, 0.0, 0.0, 0.8], marker='p')
-                # ax.scatter(xs, ys, zs, vs, c=vs, cmap=cm, marker='p')
-                ax.set_xlabel('X Label')
-                ax.set_ylabel('Y Label')
-                ax.set_zlabel('Z Label')
-                ax.set_xlim3d(0, s)
-                ax.set_ylim3d(0, s)
-                ax.set_zlim3d(0, s)
-
-                plt.show()     
+    plt.show()     

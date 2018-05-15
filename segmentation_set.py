@@ -1,25 +1,21 @@
 
 import numpy as np 
 from nn_template import *
+import data_loader as dl
 
 
 class Segmentations(dataset_template):
-
+    
     label_dict = {
-        "empty"             : 0,
-        "crank"             : 1,
-        "crank-bushing"     : 2,
-        "crank-shaft"       : 3,
-        "cylinder"          : 4,
-        "cylinder-pivot"    : 5,
-        "flywheel"          : 6,
-        "flywheel-cap"      : 7,
-        "frame-bushings"    : 8,
-        "hose-barb"         : 9,
-        "lower-frame"       : 10,
-        "piston"            : 11,
-        "spring-retainer"   : 12,
-        "upper-frame"       : 13        
+        "BACKGROUND"    : 0,
+        "CHAIR"         : 1,
+        "DESK"          : 2,
+        "COUCH"         : 3,
+        "TABLE"         : 4,
+        "WALL"          : 5,
+        "FLOOR"         : 6,
+        "WOOD"          : 7,
+        "NONE"          : 8     
     }
 
     def __load_dataset(self, path, data_dict):
@@ -64,19 +60,20 @@ class Segmentations(dataset_template):
 
     def next_mini_batch(self, dataset):
         data = []
-        labels = []
+        labs = []
+        idxs = []
         start = dataset[dataset_template.CURRENT_BATCH] * self.batch_size
         end = min(dataset[dataset_template.NUMBER_EXAMPLES], start + self.batch_size)
 
         for fname in dataset[dataset_template.DATASET][start:end]:
             filename = os.path.join(dataset[dataset_template.PATH], fname)
-            with open(filename, "rb") as f:
-                occ = np.load(f)
-                data.append(np.reshape(occ, [occ.shape[0], occ.shape[1], occ.shape[2], 1]))
-                labels.append(int(self.label_dict[os.path.basename(fname).split("_")[0]]))
+            occ, lab, idx = dl.load_xyzl(filename)
+            data.append(np.reshape(occ, [occ.shape[0], occ.shape[1], occ.shape[2], 1]))
+            labs.append(np.reshape(lab, [lab.shape[0], lab.shape[1], lab.shape[2], 1]))
+            idxs.append(idx)
 
         dataset[dataset_template.CURRENT_BATCH] += 1
-        return np.array(data), np.array(labels)
+        return np.array(data), np.array(labs), np.array(idx)
 
 
     @staticmethod
