@@ -92,16 +92,40 @@ class SegmentationNet():
         train_op = optimizer.apply_gradients(capped_gvs)
         init = tf.global_variables_initializer()
         writer = tf.summary.FileWriter(log_dir, graph=tf.get_default_graph())
+        sub_batches = 64
 
         def accuracy_test(dataset, data_dict):
             acc = 0
             dataset.restart_mini_batches(data_dict)
             for j in range(dataset.num_mini_batches(data_dict)):
-                x,y,i = dataset.next_mini_batch(data_dict)
-                pred = sess.run([pred_op], feed_dict={X: x, Y: y})
-                print(pred.shape)
-                acc = acc + np.count_nonzero(pred!=y)
+                x,y,idxs = dataset.next_mini_batch(data_dict)
+                stime = time.time()
+                accum_time_extraction = 0
+                for j in range(0, idxs[0].shape[0],sub_batches):
+                    batch = []
+                    blabs = []
+                    m = min(idxs[0].shape[0] - j, sub_batches)
+                    for k in range(j, j+m):
+                        at = time.time()
+                        xi = idxs[0][k]
+                        yi = idxs[1][k]
+                        zi = idxs[2][k]
+                        batch.append(x[0,xi-7:xi+8,yi-7:yi+8,zi-7:zi+8])
+                        blab = y[0,xi-7:xi+8,yi-7:yi+8,zi-7:zi+8]
+                        y_hat, _ = np.histogram(blab.flatten(), [0,1,2,3,4,5,6,7,8,9])
+                        if x[0,xi,yi,zi] != 1:
+                            raise Exception("Some weird shit happened - index for zero occupancy")
 
+                        if sum(y_hat) == 0:
+                            raise Exception("another weird shit happened - there are no labels")
+                        y_hat = y_hat / np.linalg.norm(y_hat)
+                        blabs.append(y_hat)
+                        accum_time_extraction = accum_time_extraction + time.time() - at
+
+                    c = sess.run([cost], feed_dict={X: np.array(batch), Y: np.array(blabs)})
+                print("Cost computation time over one sample was %f sec in average" % ((time.time() - stime)))
+                print("From that %f sec was extraction time" % (accum_time_extraction))
+                
             return float(acc / data_dict[dataset.NUMBER_EXAMPLES])
 
         config = tf.ConfigProto()
@@ -121,7 +145,6 @@ class SegmentationNet():
                     batch_stime = time.time()
                     x,y,idxs = self.dataset.next_mini_batch(self.dataset.train)
                     print("\rBatch loaded in %f" % (time.time() - batch_stime))
-                    sub_batches = 32
                     for j in range(0, idxs[0].shape[0],sub_batches):
                         batch = []
                         blabs = []
@@ -156,6 +179,7 @@ class SegmentationNet():
                 # print("Train/Dev/Test accuracies %f/%f/%f" %(acc_train, acc_dev, acc_test))
                 print("epoch %d" %(epoch+1))
 
+            accuracy_test(self.dataset, self.dataset.train)
             plt.plot(np.squeeze(np.array(costs)))
             plt.show()
             # save model
