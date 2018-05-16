@@ -59,21 +59,14 @@ class Segmentations(dataset_template):
 
 
     def next_mini_batch(self, dataset):
-        data = []
-        labs = []
-        idxs = []
         start = dataset[dataset_template.CURRENT_BATCH] * self.batch_size
-        end = min(dataset[dataset_template.NUMBER_EXAMPLES], start + self.batch_size)
 
-        for fname in dataset[dataset_template.DATASET][start:end]:
-            filename = os.path.join(dataset[dataset_template.PATH], fname)
-            occ, lab, idx = dl.load_xyzl(filename)
-            data.append(np.reshape(occ, [occ.shape[0], occ.shape[1], occ.shape[2], 1]))
-            labs.append(np.reshape(lab, [lab.shape[0], lab.shape[1], lab.shape[2], 1]))
-            idxs.append(idx)
+        fname = dataset[dataset_template.DATASET][start]
+        filename = os.path.join(dataset[dataset_template.PATH], fname)
+        occ, lab, mask, idxs = dl.load_xyzl_oct(filename, self.num_classes)
 
         dataset[dataset_template.CURRENT_BATCH] += 1
-        return np.array(data), np.array(labs), np.array(idx)
+        return occ, lab, mask, idxs, filename
 
 
     @staticmethod

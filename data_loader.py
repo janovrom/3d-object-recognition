@@ -1,6 +1,8 @@
+import time
 import os
 import math
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def load_off_file(filename):
@@ -381,6 +383,7 @@ def load_xyzl_oct(filename, n_y):
     points = []
     labels = []
     name = os.path.basename(filename).split("-")[0]
+    stime = time.time()
     with open(filename, "r") as f:
         lines = f.readlines()
         for line in lines:
@@ -389,11 +392,13 @@ def load_xyzl_oct(filename, n_y):
             points.append(float(splitted[1]))
             points.append(float(splitted[2]))
             labels.append(math.log2(float(splitted[3])))
-
+    # print("Data readed in %f sec" % (time.time() - stime))
+    
+    # size is 512x512x512 cm for this grid and maximal grid is 256x256x256 voxels
+    stime = time.time()
     pointcloud = np.array(points)
     num_points = int(pointcloud.shape[0])
-    # size is 512x512x512 cm for this grid and maximal grid is 256x256x256 voxels
-    index_grid = np.array(np.zeros((16,16,16)), dtype=np.object)
+    point_grid = np.array(np.zeros((16,16,16)), dtype=np.object)
     label_grid = np.array(np.zeros((16,16,16)), dtype=np.object)
     indices = []
 
@@ -402,50 +407,127 @@ def load_xyzl_oct(filename, n_y):
         y = pointcloud[i+1]
         z = pointcloud[i+2]
         # every 2cm is a voxel, 0,0,0 is at (159,63,0) 
-        idx_x = int(100.0 * x / 16.0) + 8
-        idx_y = int(100.0 * y / 16.0) + 8
-        idx_z = int(100.0 * z / 16.0)
+        # convert to cms, divide by half extent of the box to normalize the value, multiply by number of voxels, add center
+        idx_x = int(100.0 * x / 2.0 / 128.0 * 8 ) + 8   # zero centered
+        idx_y = int(100.0 * y / 2.0 / 128.0 * 8 ) + 8   # zero centered
+        idx_z = int(100.0 * z / 2.0 / 256.0 * 16)       # counted from 0
         if idx_x >= 0 and idx_x < 16 and idx_y >= 0 and idx_y < 16 and idx_z >= 0 and idx_z < 16:
-            if not index_grid[idx_x, idx_y, idx_z]:
-                index_grid[idx_x, idx_y, idx_z] = []
+            if not point_grid[idx_x, idx_y, idx_z]:
+                point_grid[idx_x, idx_y, idx_z] = []
                 label_grid[idx_x, idx_y, idx_z] = []
                 indices.append((idx_x, idx_y, idx_z))
 
             label_grid[idx_x, idx_y, idx_z].append(labels[int(i/3)])
-            index_grid[idx_x, idx_y, idx_z].append(x)
-            index_grid[idx_x, idx_y, idx_z].append(y)
-            index_grid[idx_x, idx_y, idx_z].append(z)
+            point_grid[idx_x, idx_y, idx_z].append(x)
+            point_grid[idx_x, idx_y, idx_z].append(y)
+            point_grid[idx_x, idx_y, idx_z].append(z)
     
+    # print("Index grid constructed in %f sec" %(time.time() - stime))
+
     # generate lists of subgrids and its histogram for labels
-    sub_grids = []
-    sub_label = np.zeros((len(indices), n_y))
+    stime = time.time()
+    sub_grids = np.array(np.zeros((len(indices),16,16,16,1)), dtype=np.float)
+    sub_label = np.array(np.zeros((len(indices),16,16,16)), dtype=np.int)
+    if len(indices) == 0:
+        raise Exception(filename)
+
+    label_lst = np.zeros((len(indices), n_y))
     for i in range(0, len(indices)):
         index = indices[i]
-        points = np.array(index_grid[index[0],index[1],index[2]])
+        points = np.array(point_grid[index[0],index[1],index[2]])
         labels = label_grid[index[0],index[1],index[2]]
-        # Find point cloud min and max
-        min_x = np.min(points[0::3])
-        min_y = np.min(points[1::3])
-        min_z = np.min(points[2::3])
-        max_x = np.max(points[0::3])
-        max_y = np.max(points[1::3])
-        max_z = np.max(points[2::3])
         hist = np.array(np.zeros((n_y,)), dtype=np.float)
-        sub_grid = np.array(np.zeros((16,16,16)), dtype=np.float)
         for j in range(0,len(labels)):
-            x = points[3*j+0] - min_x
-            y = points[3*j+1] - min_y
-            z = points[3*j+2] - min_z
+            # move the points, so that they are positioned with zero corner of the grid
+            # range of xyz should be [0,32)
+            # convert to cms, add expected zero corner, divide by half extent, multiply by number of voxels
+            x = 100.0 * points[3*j+0] - (index[0] - 8) * 32
+            y = 100.0 * points[3*j+1] - (index[1] - 8) * 32
+            z = 100.0 * points[3*j+2] - (index[2] - 0) * 32
             l = round(labels[j])
             hist[l] = hist[l] + 1
-            # compute indices
-            idx_x = int(x / 16.0)
-            idx_y = int(y / 16.0)
-            idx_z = int(z / 16.0)
-            sub_grid[idx_x, idx_y, idx_z] = 1
+            # compute indices for grid 16x16x16, which is 32x32x32 cm
+            idx_x = int(x / 2.0)
+            idx_y = int(y / 2.0)
+            idx_z = int(z / 2.0)
+            sub_grids[i,idx_x,idx_y,idx_z,0] = 1
+            sub_label[i,idx_x,idx_y,idx_z] = l
         
         hist = hist / np.linalg.norm(hist)
-        sub_label[i,:] = hist
-        sub_grids.append(sub_grid)
+        label_lst[i,:] = hist
 
-    return np.array(sub_grids), sub_label
+    # print("Sub-grids constructed in %f sec" % (time.time() - stime))    
+    return sub_grids, label_lst, sub_label, indices
+
+
+def load_xyzl_vis(filename, labels_dict, n_y):
+    xs = []
+    ys = []
+    zs = []
+    labels = []
+    stime = time.time()
+    with open(filename, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            splitted = line.split(" ")
+            xs.append(-float(splitted[0]))
+            ys.append(float(splitted[1]))
+            zs.append(float(splitted[2]))
+            labels.append(math.log2(float(splitted[3])))
+    # print("Data readed in %f sec" % (time.time() - stime))
+    
+    # size is 512x512x512 cm for this grid and maximal grid is 256x256x256 voxels
+    stime = time.time()
+    num_points = len(xs)
+    vs = []
+
+    for i in range(0,num_points):
+        # every 2cm is a voxel, 0,0,0 is at (159,63,0) 
+        # convert to cms, divide by half extent of the box to normalize the value, multiply by number of voxels, add center
+        idx_x = int(100.0 * xs[i] / 2.0 / 128.0 * 8 ) + 8   # zero centered
+        idx_y = int(100.0 * ys[i] / 2.0 / 128.0 * 8 ) + 8   # zero centered
+        idx_z = int(100.0 * zs[i] / 2.0 / 256.0 * 16)       # counted from 0
+        if idx_x >= 0 and idx_x < 16 and idx_y >= 0 and idx_y < 16 and idx_z >= 0 and idx_z < 16:
+            x = 100.0 * xs[i] - (idx_x - 8) * 32
+            y = 100.0 * ys[i] - (idx_y - 8) * 32
+            z = 100.0 * zs[i] - (idx_z - 0) * 32
+            predicted_labels = labels_dict[(idx_x,idx_y,idx_z)]
+            idx_x = int(x / 2.0)
+            idx_y = int(y / 2.0)
+            idx_z = int(z / 2.0)
+            vs.append(predicted_labels[idx_x,idx_y,idx_z])
+
+    
+    xs.append(0)
+    ys.append(0)
+    zs.append(0)
+    vs.append(0)
+    labels.append(0)
+
+    xs.append(0)
+    ys.append(0)
+    zs.append(0)
+    vs.append(8)
+    labels.append(8)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(211, projection='3d')
+    # ax.scatter(xs, ys, zs, c=[1.0, 0.0, 0.0, 0.8], marker='p')
+    ax.scatter(xs, ys, zs, c=labels, cmap=plt.get_cmap("Set1"), marker='p')
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+    ax.set_xlim3d(-256, 256)
+    ax.set_ylim3d(-256, 256)
+    ax.set_zlim3d(0, 512)
+
+    ax2 = fig.add_subplot(212, projection='3d')
+    ax2.scatter(xs, ys, zs, c=vs, cmap=plt.get_cmap("Set1"), marker='p')
+    ax2.set_xlabel('X Label')
+    ax2.set_ylabel('Y Label')
+    ax2.set_zlabel('Z Label')
+    ax2.set_xlim3d(-256, 256)
+    ax2.set_ylim3d(-256, 256)
+    ax2.set_zlim3d(0, 512)
+
+    plt.show()     
