@@ -94,9 +94,8 @@ class SegmentationNet():
         return cost  # compute cost
 
 
-    def compute_predictions(self, Zl, Y):
-        softmax = tf.nn.softmax(logits=Zl)
-        return tf.argmax(softmax, axis=-1)
+    def compute_predictions(self, U_labels):
+        return tf.argmax(U_labels, axis=-1)
 
 
     def run_model(self, load=False, train=True,visualize=True):
@@ -106,7 +105,8 @@ class SegmentationNet():
         X, Y, Y_mask = self.create_placeholders(n_y)
         A_fv, Z_class, U_mask = self.forward_propagation_fv(X, n_y)
         cost = self.compute_cost_fv(Z_class, Y, n_y, Y_mask, U_mask)
-        # pred_op = self.compute_predictions(Z_classif, Y)
+        pred_op = self.compute_predictions(U_mask)
+        print(pred_op)
 
         step = tf.Variable(0, trainable=False, name="global_step")
         lr_dec = tf.train.exponential_decay(self.lr, step, 10000, 0.96)
@@ -130,7 +130,7 @@ class SegmentationNet():
                 for j in range(0, y.shape[0],sub_batches):
                     start = j
                     end = min(y.shape[0],sub_batches+j)
-                    c, ls = sess.run([cost, U_mask], feed_dict={X: x[start:end], Y: y[start:end], Y_mask: mask[start:end]})
+                    c, ls = sess.run([cost, pred_op], feed_dict={X: x[start:end], Y: y[start:end], Y_mask: mask[start:end]})
                     labels.extend(ls)
                 
                 if visualize:
