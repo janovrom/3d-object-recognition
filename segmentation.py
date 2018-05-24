@@ -53,29 +53,51 @@ class SegmentationNet():
         # imagine that the net operates over 16x16x16 blocks
         # IN 16, OUT 16
         A0 = self.convolution(X, [5,5,5,1,32], padding="SAME")
-        # IN 16, OUT 8
-        A1 = self.convolution(A0, [3,3,3,32,64], padding="SAME")
-        A1 = tf.nn.max_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID")
-        # IN 8, OUT 6, MP to 3
-        A2 = self.convolution(A1, [3,3,3,64,128], padding="VALID")
-        A2 = tf.nn.max_pool3d(A2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID")
-        # IN 3, OUT 1
-        A3 = self.convolution(A2, [3,3,3,128,256], padding="VALID")
-        # fully-conv layer
-        A_fv = self.convolution(A3, [1,1,1,256,512], padding="VALID")
-        A_class = self.convolution(A_fv, [1,1,1,512,n_y], act=None)
+        A1 = self.convolution(A0, [5,5,5,32,64], padding="SAME")
+        A2 = self.convolution(A1, [3,3,3,64,128], padding="SAME")
+        A_fv = tf.reduce_max(A2, axis=1, keepdims=True)
+        print(A_fv)
+        A_fv = tf.reduce_max(A_fv, axis=2, keepdims=True)
+        print(A_fv)
+        A_fv = tf.reduce_max(A_fv, axis=3, keepdims=True)
+        print(A_fv)
+        A_class = self.convolution(A_fv, [1,1,1,128,n_y], padding="SAME", act=None)
+        print(A_class)
+        t = tf.tile(A_class, [1,16,16,16,1])
+        print(t)
+        C0 = tf.concat([A2, t],4)
+        print(C0)
+        U0 = self.convolution(C0, [3,3,3,128+n_y,64], padding="SAME")
+        print(U0)
+        C1 = tf.concat([U0,A1],4)
+        print(C1)
+        U1 = self.convolution(C1, [3,3,3,128,32], padding="SAME")
+        print(U1)
+        U_mask = self.convolution(U1, [3,3,3,32,n_y], padding="SAME")
 
-        # IN 1, OUT 4
-        U0 = tf.keras.layers.UpSampling3D(size=(4,4,4))(A_fv)
-        U0 = self.convolution(U0, [3,3,3,512,256], padding="SAME")
-        # IN 4, OUT 8
-        U1 = tf.keras.layers.UpSampling3D(size=(2,2,2))(U0)
-        U1 = self.convolution(U1, [3,3,3,256,64], padding="SAME")
-        # IN 8, OUT 16
-        U2 = tf.keras.layers.UpSampling3D(size=(2,2,2))(U1)
-        U2 = self.convolution(U2, [3,3,3,64,32], padding="SAME")
-        # Convert to one hot and smooth
-        U_mask = self.convolution(U2, [3,3,3,32,n_y], padding="SAME")
+        # # IN 16, OUT 8
+        # A1 = self.convolution(A0, [3,3,3,32,64], padding="SAME")
+        # A1 = tf.nn.max_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID")
+        # # IN 8, OUT 6, MP to 3
+        # A2 = self.convolution(A1, [3,3,3,64,128], padding="VALID")
+        # A2 = tf.nn.max_pool3d(A2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID")
+        # # IN 3, OUT 1
+        # A3 = self.convolution(A2, [3,3,3,128,256], padding="VALID")
+        # # fully-conv layer
+        # A_fv = self.convolution(A3, [1,1,1,256,512], padding="VALID")
+        # A_class = self.convolution(A_fv, [1,1,1,512,n_y], act=None)
+
+        # # IN 1, OUT 4
+        # U0 = tf.keras.layers.UpSampling3D(size=(4,4,4))(A_fv)
+        # U0 = self.convolution(U0, [3,3,3,512,256], padding="SAME")
+        # # IN 4, OUT 8
+        # U1 = tf.keras.layers.UpSampling3D(size=(2,2,2))(U0)
+        # U1 = self.convolution(U1, [3,3,3,256,64], padding="SAME")
+        # # IN 8, OUT 16
+        # U2 = tf.keras.layers.UpSampling3D(size=(2,2,2))(U1)
+        # U2 = self.convolution(U2, [3,3,3,64,32], padding="SAME")
+        # # Convert to one hot and smooth
+        # U_mask = self.convolution(U2, [3,3,3,32,n_y], padding="SAME")
 
         return A_fv, A_class, U_mask
 
@@ -116,7 +138,7 @@ class SegmentationNet():
         train_op = optimizer.apply_gradients(capped_gvs)
         init = tf.global_variables_initializer()
         writer = tf.summary.FileWriter(log_dir, graph=tf.get_default_graph())
-        sub_batches = 128
+        sub_batches = 16
 
         def accuracy_test(dataset, data_dict):
             acc = 0
@@ -219,4 +241,4 @@ class SegmentationNet():
 
 if __name__ == "__main__":
     s = SegmentationNet("SegNet", "./3d-object-recognition/SegData")
-    s.run_model(load=False, train=True,visualize=False)
+    s.run_model(load=False, train=True,visualize=True)
