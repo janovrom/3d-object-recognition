@@ -54,8 +54,8 @@ class SegmentationNet():
         # IN 16, OUT 16
         A0 = self.convolution(X, [5,5,5,1,32], padding="SAME")
         # IN 16, OUT 8
-        A1 = self.convolution(A0, [3,3,3,32,64], padding="SAME")
-        A1 = tf.nn.max_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID")
+        A01 = self.convolution(A0, [3,3,3,32,64], padding="SAME")
+        A1 = tf.nn.max_pool3d(A01, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID")
         # IN 8, OUT 6, MP to 3
         A2 = self.convolution(A1, [3,3,3,64,128], padding="VALID")
         A2 = tf.nn.max_pool3d(A2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID")
@@ -73,7 +73,7 @@ class SegmentationNet():
         U1 = self.convolution(U1, [3,3,3,256,64], padding="SAME")
         # IN 8, OUT 16
         U2 = tf.keras.layers.UpSampling3D(size=(2,2,2))(U1)
-        U2 = self.convolution(U2, [3,3,3,64,32], padding="SAME")
+        U2 = self.convolution(U2+A01, [3,3,3,64,32], padding="SAME")
         # Convert to one hot and smooth
         U_mask = self.convolution(U2, [3,3,3,32,n_y], padding="SAME")
 
@@ -219,4 +219,4 @@ class SegmentationNet():
 
 if __name__ == "__main__":
     s = SegmentationNet("SegNet", "./3d-object-recognition/SegData")
-    s.run_model(load=False, train=True,visualize=False)
+    s.run_model(load=True, train=False,visualize=True)
