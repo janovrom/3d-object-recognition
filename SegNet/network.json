@@ -2,7 +2,7 @@
     "params":
     {
         "learning_rate" : 0.0001,
-        "num_epochs" : 15,
+        "num_epochs" : 20,
         "l2_reg_weights" : 0.1,
         "l2_reg_biases" : 0.1,
         "decay_step" : 10000,

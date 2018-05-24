@@ -464,62 +464,70 @@ def load_xyzl_vis(filename, labels_dict, n_y):
     xs = []
     ys = []
     zs = []
+    pointsx = []
+    pointsy = []
+    pointsz = []
     labels = []
     stime = time.time()
     with open(filename, "r") as f:
         lines = f.readlines()
         for line in lines:
             splitted = line.split(" ")
-            xs.append(-float(splitted[0]))
-            ys.append(float(splitted[1]))
-            zs.append(float(splitted[2]))
+            pointsx.append(-float(splitted[0]))
+            pointsy.append(float(splitted[1]))
+            pointsz.append(float(splitted[2]))
             labels.append(math.log2(float(splitted[3])))
     # print("Data readed in %f sec" % (time.time() - stime))
     
     # size is 512x512x512 cm for this grid and maximal grid is 256x256x256 voxels
     stime = time.time()
-    num_points = len(xs)
+    num_points = len(pointsx)
     vs = []
+    vs_hat = []
 
     for i in range(0,num_points):
         # every 2cm is a voxel, 0,0,0 is at (159,63,0) 
         # convert to cms, divide by half extent of the box to normalize the value, multiply by number of voxels, add center
-        idx_x = int(100.0 * xs[i] / 2.0 / 128.0 * 8 ) + 8   # zero centered
-        idx_y = int(100.0 * ys[i] / 2.0 / 128.0 * 8 ) + 8   # zero centered
-        idx_z = int(100.0 * zs[i] / 2.0 / 256.0 * 16)       # counted from 0
+        idx_x = int(100.0 * pointsx[i] / 2.0 / 128.0 * 8 ) + 8   # zero centered
+        idx_y = int(100.0 * pointsy[i] / 2.0 / 128.0 * 8 ) + 8   # zero centered
+        idx_z = int(100.0 * pointsz[i] / 2.0 / 256.0 * 16)       # counted from 0
         if idx_x >= 0 and idx_x < 16 and idx_y >= 0 and idx_y < 16 and idx_z >= 0 and idx_z < 16:
-            x = 100.0 * xs[i] - (idx_x - 8) * 32
-            y = 100.0 * ys[i] - (idx_y - 8) * 32
-            z = 100.0 * zs[i] - (idx_z - 0) * 32
+            x = 100.0 * pointsx[i] - (idx_x - 8) * 32
+            y = 100.0 * pointsy[i] - (idx_y - 8) * 32
+            z = 100.0 * pointsz[i] - (idx_z - 0) * 32
             predicted_labels = labels_dict[(idx_x,idx_y,idx_z)]
             idx_x = int(x / 2.0)
             idx_y = int(y / 2.0)
             idx_z = int(z / 2.0)
-            vs.append(predicted_labels[idx_x,idx_y,idx_z])
+            xs.append(pointsx[i])
+            ys.append(pointsy[i])
+            zs.append(pointsz[i])
+            vs_hat.append(labels[i])
+            vs.append(float(predicted_labels[idx_x,idx_y,idx_z]))
 
-    
     xs.append(0)
     ys.append(0)
     zs.append(0)
     vs.append(0)
-    labels.append(0)
+    vs_hat.append(0)
 
     xs.append(0)
     ys.append(0)
     zs.append(0)
     vs.append(8)
-    labels.append(8)
+    vs_hat.append(8)
 
     fig = plt.figure()
-    ax = fig.add_subplot(211, projection='3d')
-    # ax.scatter(xs, ys, zs, c=[1.0, 0.0, 0.0, 0.8], marker='p')
-    ax.scatter(xs, ys, zs, c=labels, cmap=plt.get_cmap("Set1"), marker='p')
+    ax = fig.add_subplot(111, projection='3d')
+    m = plt.get_cmap("Set1")
+    ax.scatter(xs, ys, zs, c=vs_hat, cmap=m, marker='p')
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
-
-    ax2 = fig.add_subplot(212, projection='3d')
-    ax2.scatter(xs, ys, zs, c=vs, cmap=plt.get_cmap("Set1"), marker='p')
+    # plt.show()
+    fig2 = plt.figure()
+    ax2 = fig2.add_subplot(111, projection='3d')
+    ax2.scatter(xs, ys, zs, c=vs, cmap=m, marker='p')
     ax2.set_xlabel('X')
     ax2.set_ylabel('Y')
     ax2.set_zlabel('Z')

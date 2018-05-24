@@ -219,4 +219,4 @@ class SegmentationNet():
 
 if __name__ == "__main__":
     s = SegmentationNet("SegNet", "./3d-object-recognition/SegData")
-    s.run_model(load=True, train=False)
+    s.run_model(load=False, train=True,visualize=False)
