@@ -384,13 +384,22 @@ def load_xyzl_oct(filename, n_y):
     labels = []
     name = os.path.basename(filename).split("-")[0]
     stime = time.time()
+    cx = 0
+    cy = 0
+    cz = 0
     with open(filename, "r") as f:
         lines = f.readlines()
         for line in lines:
             splitted = line.split(" ")
-            points.append(-float(splitted[0]))
-            points.append(float(splitted[1]))
-            points.append(float(splitted[2]))
+            x = -float(splitted[0])
+            y = float(splitted[1])
+            z = float(splitted[2])
+            cx = cx + x
+            cy = cy + y
+            cz = cz + z
+            points.append(x)
+            points.append(y)
+            points.append(z)
             labels.append(math.log2(float(splitted[3])))
     # print("Data readed in %f sec" % (time.time() - stime))
     
@@ -402,15 +411,19 @@ def load_xyzl_oct(filename, n_y):
     label_grid = np.array(np.zeros((16,16,16)), dtype=np.object)
     indices = []
 
+    cx = cx / num_points
+    cy = cy / num_points
+    cz = cz / num_points
+
     for i in range(0,num_points,3):
-        x = pointcloud[i+0]
-        y = pointcloud[i+1]
-        z = pointcloud[i+2]
+        x = pointcloud[i+0] - cx
+        y = pointcloud[i+1] - cy
+        z = pointcloud[i+2] - cz
         # every 2cm is a voxel, 0,0,0 is at (159,63,0) 
         # convert to cms, divide by half extent of the box to normalize the value, multiply by number of voxels, add center
         idx_x = int(100.0 * x / 2.0 / 128.0 * 8 ) + 8   # zero centered
         idx_y = int(100.0 * y / 2.0 / 128.0 * 8 ) + 8   # zero centered
-        idx_z = int(100.0 * z / 2.0 / 256.0 * 16)       # counted from 0
+        idx_z = int(100.0 * z / 2.0 / 128.0 * 8 ) + 8   # counted from 0
         if idx_x >= 0 and idx_x < 16 and idx_y >= 0 and idx_y < 16 and idx_z >= 0 and idx_z < 16:
             if not point_grid[idx_x, idx_y, idx_z]:
                 point_grid[idx_x, idx_y, idx_z] = []
@@ -443,7 +456,7 @@ def load_xyzl_oct(filename, n_y):
             # convert to cms, add expected zero corner, divide by half extent, multiply by number of voxels
             x = 100.0 * points[3*j+0] - (index[0] - 8) * 32
             y = 100.0 * points[3*j+1] - (index[1] - 8) * 32
-            z = 100.0 * points[3*j+2] - (index[2] - 0) * 32
+            z = 100.0 * points[3*j+2] - (index[2] - 8) * 32
             l = round(labels[j])
             hist[l] = hist[l] + 1
             # compute indices for grid 16x16x16, which is 32x32x32 cm
@@ -469,13 +482,22 @@ def load_xyzl_vis(filename, labels_dict, n_y):
     pointsz = []
     labels = []
     stime = time.time()
+    cx = 0
+    cy = 0
+    cz = 0
     with open(filename, "r") as f:
         lines = f.readlines()
         for line in lines:
             splitted = line.split(" ")
-            pointsx.append(-float(splitted[0]))
-            pointsy.append(float(splitted[1]))
-            pointsz.append(float(splitted[2]))
+            x = -float(splitted[0])
+            y = float(splitted[1])
+            z = float(splitted[2])
+            cx = cx + x
+            cy = cy + y
+            cz = cz + z
+            pointsx.append(x)
+            pointsy.append(y)
+            pointsz.append(z)
             labels.append(math.log2(float(splitted[3])))
     # print("Data readed in %f sec" % (time.time() - stime))
     
@@ -485,23 +507,30 @@ def load_xyzl_vis(filename, labels_dict, n_y):
     vs = []
     vs_hat = []
 
+    cx = cx / num_points
+    cy = cy / num_points
+    cz = cz / num_points
+
     for i in range(0,num_points):
         # every 2cm is a voxel, 0,0,0 is at (159,63,0) 
         # convert to cms, divide by half extent of the box to normalize the value, multiply by number of voxels, add center
-        idx_x = int(100.0 * pointsx[i] / 2.0 / 128.0 * 8 ) + 8   # zero centered
-        idx_y = int(100.0 * pointsy[i] / 2.0 / 128.0 * 8 ) + 8   # zero centered
-        idx_z = int(100.0 * pointsz[i] / 2.0 / 256.0 * 16)       # counted from 0
+        x = pointsx[i] - cx
+        y = pointsy[i] - cy
+        z = pointsz[i] - cz
+        idx_x = int(100.0 * x / 2.0 / 128.0 * 8 ) + 8   # zero centered
+        idx_y = int(100.0 * y / 2.0 / 128.0 * 8 ) + 8   # zero centered
+        idx_z = int(100.0 * z / 2.0 / 128.0 * 8 ) + 8   # counted from 0
         if idx_x >= 0 and idx_x < 16 and idx_y >= 0 and idx_y < 16 and idx_z >= 0 and idx_z < 16:
-            x = 100.0 * pointsx[i] - (idx_x - 8) * 32
-            y = 100.0 * pointsy[i] - (idx_y - 8) * 32
-            z = 100.0 * pointsz[i] - (idx_z - 0) * 32
+            x = 100.0 * x - (idx_x - 8) * 32
+            y = 100.0 * y - (idx_y - 8) * 32
+            z = 100.0 * z - (idx_z - 8) * 32
             predicted_labels = labels_dict[(idx_x,idx_y,idx_z)]
             idx_x = int(x / 2.0)
             idx_y = int(y / 2.0)
             idx_z = int(z / 2.0)
-            xs.append(pointsx[i])
-            ys.append(pointsy[i])
-            zs.append(pointsz[i])
+            xs.append(x)
+            ys.append(y)
+            zs.append(z)
             vs_hat.append(labels[i])
             vs.append(float(predicted_labels[idx_x,idx_y,idx_z]))
 

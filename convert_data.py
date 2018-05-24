@@ -614,7 +614,7 @@ if __name__ == '__main__':
 
     # get_visible_set_sparse("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-sparse-seen/", 32, "test", 5)
     # sanity check on saved data
-    occ,lab = dl.load_xyzl_oct("D:\\janovrom\\Unity\\ModelChodby\\data-out\\low-res\\data00000000.xyzl",9)
+    occ,lab,_,_ = dl.load_xyzl_oct("D:\\janovrom\\Unity\\ModelChodby\\data-out\\low-res\\data-00000000.xyzl", 9)
     xs = []
     ys = []
     zs = []
@@ -644,8 +644,6 @@ if __name__ == '__main__':
     ax.set_xlabel('X Label')
     ax.set_ylabel('Y Label')
     ax.set_zlabel('Z Label')
-    ax.set_xlim3d(0, 320)
-    ax.set_ylim3d(0, 128)
-    ax.set_zlim3d(0, 192)
+
 
     plt.show()     
