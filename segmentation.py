@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 class SegmentationNet():
 
     def create_placeholders(self, n_y):
-        X = tf.placeholder(dtype=tf.float32, shape=(None,32,32,32,1), name="input_grid")
+        X = tf.placeholder(dtype=tf.float32, shape=(None,16,16,16,1), name="input_grid")
         # X = tf.placeholder(dtype=tf.float32, shape=(1,320,128,192,1), name="input_grid")
         Y = tf.placeholder(dtype=tf.float32, shape=(None,n_y), name="input_distributions")
         U_deconv = tf.placeholder(dtype=tf.float32, shape=(1,8,8,256), name="input_deconv")
@@ -71,31 +71,31 @@ class SegmentationNet():
         U1 = self.convolution2d(U1, [3,3,256,128], padding="SAME")
         #
         U2 = tf.image.resize_bilinear(U1, [32,32])
-        U2 = self.convolution(U2, [3,3,128,128], padding="SAME")
-        U2 = self.convolution(U2, [3,3,128,64], padding="SAME")
+        U2 = self.convolution2d(U2, [3,3,128,128], padding="SAME")
+        U2 = self.convolution2d(U2, [3,3,128,64], padding="SAME")
         #
         U3 = tf.image.resize_bilinear(U2, [64,64])
-        U3 = self.convolution(U3, [3,3,64,64], padding="SAME")
-        U3 = self.convolution(U3, [3,3,64,32], padding="SAME")
+        U3 = self.convolution2d(U3, [3,3,64,64], padding="SAME")
+        U3 = self.convolution2d(U3, [3,3,64,32], padding="SAME")
         #
         U4 = tf.image.resize_bilinear(U3, [128,128])
-        U4 = self.convolution(U4, [3,3,32,32], padding="SAME")
-        U_mask = self.convolution(U4, [3,3,32,n_y], padding="SAME", act=None)
+        U4 = self.convolution2d(U4, [3,3,32,32], padding="SAME")
+        U_mask = self.convolution2d(U4, [3,3,32,n_y], padding="SAME", act=None)
 
         return U_mask
 
 
     def forward_propagation_fv(self, X, n_y):
         self.layer_idx = 0
-        # imagine that the net operates over 32x32x32 blocks
-        # IN 32
+        # imagine that the net operates over 16x16x16 blocks
+        # IN 16
         A0 = self.convolution(X, [5,5,5,1,32], padding="SAME") 
-        A0 = tf.nn.avg_pool3d(A0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 16x16x16
+        A0 = tf.nn.avg_pool3d(A0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8x8x8
         A1 = self.convolution(A0, [5,5,5,32,64], padding="SAME")
-        A1 = tf.nn.avg_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8x8x8
-        A2 = self.convolution(A1, [5,5,5,64,128], padding="VALID") 
-        A2 = tf.nn.avg_pool3d(A2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 4x4x4
-        A_fv = self.convolution(A2, [4,4,4,128,256], padding="VALID") #1x1x1x256
+        A1 = tf.nn.avg_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 4x4x4
+        A2 = self.convolution(A1, [3,3,3,64,128], padding="SAME") 
+        A2 = tf.nn.avg_pool3d(A2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 2x2x2
+        A_fv = self.convolution(A2, [2,2,2,128,256], padding="VALID") #1x1x1x256
         A_class = self.convolution(A_fv, [1,1,1,256,n_y], padding="VALID", act=None) #1x1x1x256
         print(A_fv)
         return A_fv, A_class
@@ -159,7 +159,7 @@ class SegmentationNet():
             dataset.restart_mini_batches(data_dict)
             for i in range(dataset.num_mini_batches(data_dict)):
                 ltime = time.time()
-                x,y,_,idxs,filename,d_labels = self.dataset.next_mini_batch(self.dataset.train)
+                x,y,_,idxs,filename,d_labels = self.dataset.next_mini_batch(data_dict)
                 ltime_end = time.time()
                 stime = time.time()
                 D = np.zeros((1,8,8,256), dtype=np.float)
@@ -171,7 +171,7 @@ class SegmentationNet():
                     A = np.array(A)[0]
                     for k in range(0,min(sub_batches, A.shape[0])):
                         idx = idxs[k]
-                        D[0,idx[0],idx[1],idx[2],:] = A[k,0,0,0,:]
+                        D[0,idx[0],idx[1],:] = A[k,0,0,0,:]
 
                 deconvolved_image = sess.run([tf.argmax(A_deconv, axis=-1)], feed_dict={U_deconv: D, Y_deconv: d_labels})
                 deconvolved_image = np.array(deconvolved_image)[0,0]
@@ -216,9 +216,8 @@ class SegmentationNet():
                             end = min(y.shape[0],sub_batches+j)
                             _,c = sess.run([train_op_fv,cost_fv], feed_dict={X: x[start:end], Y: y[start:end]})
 
-                            cc = cc + c
+                            cc = cc + c / y.shape[0]
 
-                        cc = cc / y.shape[0]
                         # train the deconvolution
                         #_,d_cost = sess.run([train_op_d,cost_d], feed_dict={U_deconv: D, Y_deconv: d_labels})
                         # print("\rBatch trained in %f" % (time.time() - batch_stime), end="")
@@ -236,7 +235,7 @@ class SegmentationNet():
                             A = np.array(A)
                             for k in range(0,min(sub_batches, A.shape[0])):
                                 idx = idxs[k]
-                                D[0,idx[0],idx[1],idx[2],:] = A[k,0,0,0,:]
+                                D[0,idx[0],idx[1],:] = A[k,0,0,0,:]
 
                     costs.append(cc / (batches))
                     print("\nEpoch %d trained in %f, cost %f" % (epoch+1, time.time() - stime, costs[-1]))
@@ -278,4 +277,4 @@ class SegmentationNet():
 
 if __name__ == "__main__":
     s = SegmentationNet("SegNet", "./3d-object-recognition/SegData")
-    s.run_model(load=True, train=False,visualize=True)
+    s.run_model(load=False, train=True,visualize=False)

@@ -407,19 +407,19 @@ def load_xyzl_oct(filename, n_y):
     cz = cz / (num_points/3)
 
     # get the deconv labels
-    deconv_hists = np.array(np.zeros((32,32,32,n_y)), dtype=np.int)
-    deconv_labels = np.array(np.zeros((32,32,32)), dtype=np.int)
+    deconv_hists = np.array(np.zeros((128,128,n_y)), dtype=np.int)
+    deconv_labels = np.array(np.zeros((128,128)), dtype=np.int)
     for i in range(0,num_points,3):
         x = pointcloud[i+0] - cx
         y = pointcloud[i+1] - cy
         z = pointcloud[i+2] - cz
         # every 4cm is a voxel, 0,0,0 is in the middle
         # convert to cms, divide by half extent of the box to normalize the value, multiply by number of voxels, add center
-        idx_x = int(100.0 * x / 16.0) + 16   # zero centered
-        idx_y = int(100.0 * y / 16.0) + 16   # zero centered
-        idx_z = int(100.0 * z / 16.0) + 16   # zero centered
-        if idx_x >= 0 and idx_x < 32 and idx_y >= 0 and idx_y < 32 and idx_z >= 0 and idx_z < 32:
-            deconv_hists[idx_x, idx_y, idx_z, labels[int(i/3)]] = deconv_hists[idx_x, idx_y, idx_z, labels[int(i/3)]] + 1
+        idx_x = int(100.0 * x / 256.0 * 64) + 64   # zero centered
+        idx_y = int(100.0 * y / 256.0 * 64) + 64   # zero centered
+        idx_z = int(100.0 * z / 256.0 * 64) + 64   # zero centered
+        if idx_x >= 0 and idx_x < 128 and idx_y >= 0 and idx_y < 128 and idx_z >= 0 and idx_z < 128:
+            deconv_hists[idx_x, idx_y, labels[int(i/3)]] = deconv_hists[idx_x, idx_y, labels[int(i/3)]] + 1
 
     # make it a distribution
     deconv_labels = np.argmax(deconv_hists, axis=-1)
@@ -537,7 +537,7 @@ def load_xyzl_vis(filename, deconvolved_image, n_y):
             ys.append(y)
             zs.append(z)
             vs_hat.append(labels[i])
-            vs.append(float(deconvolved_image[idx_x,idx_y,idx_z]))
+            vs.append(float(deconvolved_image[idx_x,idx_y]))
 
     xs.append(0)
     ys.append(0)

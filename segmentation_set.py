@@ -55,7 +55,7 @@ class Segmentations(dataset_template):
         occ, lab, mask, idxs, deconv_labels = dl.load_xyzl_oct(filename, self.num_classes)
 
         dataset[dataset_template.CURRENT_BATCH] += 1
-        return occ, lab, mask, idxs, filename, np.reshape(deconv_labels, [1,32,32,32])
+        return occ, lab, mask, idxs, filename, np.reshape(deconv_labels, [1,128,128])
 
 
     @staticmethod
