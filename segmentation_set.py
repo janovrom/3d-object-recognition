@@ -35,27 +35,16 @@ class Segmentations(dataset_template):
         self.train = {}
         self.test = {}
         self.dev = {}
+        self.train_d = {}
+        self.test_d = {}
+        self.dev_d = {}
         # initialize datasets
         self.__load_dataset(os.path.join(datapath, "train"), self.train)
         self.__load_dataset(os.path.join(datapath, "test"), self.test)
         self.__load_dataset(os.path.join(datapath, "dev"), self.dev)
-
-
-    def get_data(self, dataset, name):
-        data = []
-        labels = []
-        for fname in dataset[dataset_template.DATASET]:
-            if name in fname:
-                print("Searched for %s, found %s." % (name, fname))
-                filename = os.path.join(dataset[dataset_template.PATH], fname)
-                with open(filename, "rb") as f:
-                    data.append(np.reshape(np.load(f), self.shape))
-                    labels.append(int(self.label_dict[os.path.basename(fname).split("_")[0]]))
-                break
-
-        if len(data) == 0:
-            print("No such name found: "+name)
-        return np.array(data), np.array(labels)
+        self.__load_dataset(os.path.join(datapath, "d/train"), self.train_d)
+        self.__load_dataset(os.path.join(datapath, "d/test"), self.test_d)
+        self.__load_dataset(os.path.join(datapath, "d/dev"), self.dev_d)
 
 
     def next_mini_batch(self, dataset):
@@ -63,10 +52,10 @@ class Segmentations(dataset_template):
 
         fname = dataset[dataset_template.DATASET][start]
         filename = os.path.join(dataset[dataset_template.PATH], fname)
-        occ, lab, mask, idxs = dl.load_xyzl_oct(filename, self.num_classes)
+        occ, lab, mask, idxs, deconv_labels = dl.load_xyzl_oct(filename, self.num_classes)
 
         dataset[dataset_template.CURRENT_BATCH] += 1
-        return occ, lab, mask, idxs, filename
+        return occ, lab, mask, idxs, filename, np.reshape(deconv_labels, [1,32,32,32])
 
 
     @staticmethod

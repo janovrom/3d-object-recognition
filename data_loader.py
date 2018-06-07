@@ -331,51 +331,41 @@ def load_xyz_as_variance(filename, grid_size=32, normalize=False):
 
 
 def load_xyzl(filename):
-    points = []
-    labels = []
+    xs = []
+    ys = []
+    zs = []
     name = os.path.basename(filename).split("-")[0]
     with open(filename, "r") as f:
         lines = f.readlines()
         for line in lines:
             splitted = line.split(" ")
-            points.append(-float(splitted[0]))
-            points.append(float(splitted[1]))
-            points.append(float(splitted[2]))
-            labels.append(math.log2(float(splitted[3])))
+            xs.append(-float(splitted[0]))
+            ys.append(float(splitted[1]))
+            zs.append(float(splitted[2]))
 
-    pointcloud = np.array(points)
-    num_points = int(pointcloud.shape[0])
-    # Find point cloud min and max
-    min_x = np.min(pointcloud[0::3])
-    min_y = np.min(pointcloud[1::3])
-    min_z = np.min(pointcloud[2::3])
-    max_x = np.max(pointcloud[0::3])
-    max_y = np.max(pointcloud[1::3])
-    max_z = np.max(pointcloud[2::3])
-    # Compute sizes 
-    size_x = max_x - min_x
-    size_y = max_y - min_y
-    size_z = max_z - min_z
-    
-    print("%s has size=(%f, %f, %f) meters" % (os.path.basename(filename), size_x, size_y, size_z))
-    occupancy_grid = np.array(np.zeros((320,128,192)), dtype=np.float32)
-    labels_grid = np.array(-np.ones((320,128,192)), dtype=np.float32)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    # cm = LinearSegmentedColormap.from_list("alpha", [(0.0,0.0,0.0,0.0), (1.0,0.0,0.0,1.0)])
+    ax.scatter(xs, ys, zs, c=[1.0, 0.0, 0.0, 0.8], marker='p')
+    # ax.scatter(xs, ys, zs, c=vs, cmap=plt.get_cmap("Set1"), marker='p')
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+    plt.show()
 
-    for i in range(0,num_points,3):
-        x = pointcloud[i+0]
-        y = pointcloud[i+1]
-        z = pointcloud[i+2]
-        # every 2cm is a voxel, 0,0,0 is at (159,63,0) 
-        idx_x = int(100.0 * x / 2.0) + 159
-        idx_y = int(100.0 * y / 2.0) + 63
-        idx_z = int(100.0 * z / 2.0)
-        # add padding of 7
-        if idx_x >= 7 and idx_x < 313 and idx_y >= 7 and idx_y < 121 and idx_z >= 7 and idx_z < 185:
-            occupancy_grid[idx_x, idx_y, idx_z] = 1
-            labels_grid[idx_x, idx_y, idx_z] = labels[int(i/3)]
-
-    return occupancy_grid, labels_grid, np.nonzero(occupancy_grid)
-
+# conversion label array
+label_conversion = [0, 1, 2, 3, 4, 0, 0, 0, 8]
+'''label_dict = {
+    "BACKGROUND"    : 0,
+    "CHAIR"         : 1,
+    "DESK"          : 2,
+    "COUCH"         : 3,
+    "TABLE"         : 4,
+    "WALL"          : 5,
+    "FLOOR"         : 6,
+    "WOOD"          : 7,
+    "NONE"          : 8     
+}'''
 
 def load_xyzl_oct(filename, n_y):
     # generate two grids - 16x16x16 coarse grid for indexing
@@ -400,31 +390,52 @@ def load_xyzl_oct(filename, n_y):
             points.append(x)
             points.append(y)
             points.append(z)
-            labels.append(math.log2(float(splitted[3])))
+            label = int(np.round(math.log2(float(splitted[3]))))
+            labels.append(label_conversion[label])
     # print("Data readed in %f sec" % (time.time() - stime))
     
-    # size is 512x512x512 cm for this grid and maximal grid is 256x256x256 voxels
+    # size is 512x512x512 cm for this grid and maximal grid is 128x128x128 voxels
     stime = time.time()
     pointcloud = np.array(points)
     num_points = int(pointcloud.shape[0])
-    point_grid = np.array(np.zeros((16,16,16)), dtype=np.object)
-    label_grid = np.array(np.zeros((16,16,16)), dtype=np.object)
+    point_grid = np.array(np.zeros((8,8,8)), dtype=np.object)
+    label_grid = np.array(np.zeros((8,8,8)), dtype=np.object)
     indices = []
 
-    cx = cx / num_points
-    cy = cy / num_points
-    cz = cz / num_points
+    cx = cx / (num_points/3)
+    cy = cy / (num_points/3)
+    cz = cz / (num_points/3)
+
+    # get the deconv labels
+    deconv_hists = np.array(np.zeros((32,32,32,n_y)), dtype=np.int)
+    deconv_labels = np.array(np.zeros((32,32,32)), dtype=np.int)
+    for i in range(0,num_points,3):
+        x = pointcloud[i+0] - cx
+        y = pointcloud[i+1] - cy
+        z = pointcloud[i+2] - cz
+        # every 4cm is a voxel, 0,0,0 is in the middle
+        # convert to cms, divide by half extent of the box to normalize the value, multiply by number of voxels, add center
+        idx_x = int(100.0 * x / 16.0) + 16   # zero centered
+        idx_y = int(100.0 * y / 16.0) + 16   # zero centered
+        idx_z = int(100.0 * z / 16.0) + 16   # zero centered
+        if idx_x >= 0 and idx_x < 32 and idx_y >= 0 and idx_y < 32 and idx_z >= 0 and idx_z < 32:
+            deconv_hists[idx_x, idx_y, idx_z, labels[int(i/3)]] = deconv_hists[idx_x, idx_y, idx_z, labels[int(i/3)]] + 1
+
+    # make it a distribution
+    deconv_labels = np.argmax(deconv_hists, axis=-1)
+    # sanity check
+    # print(deconv_labels.shape)
 
     for i in range(0,num_points,3):
         x = pointcloud[i+0] - cx
         y = pointcloud[i+1] - cy
         z = pointcloud[i+2] - cz
-        # every 2cm is a voxel, 0,0,0 is at (159,63,0) 
+        # every 4cm is a voxel, 0,0,0 is in the middle
         # convert to cms, divide by half extent of the box to normalize the value, multiply by number of voxels, add center
-        idx_x = int(100.0 * x / 2.0 / 128.0 * 8 ) + 8   # zero centered
-        idx_y = int(100.0 * y / 2.0 / 128.0 * 8 ) + 8   # zero centered
-        idx_z = int(100.0 * z / 2.0 / 128.0 * 8 ) + 8   # counted from 0
-        if idx_x >= 0 and idx_x < 16 and idx_y >= 0 and idx_y < 16 and idx_z >= 0 and idx_z < 16:
+        idx_x = int(100.0 * x / 256.0 * 4) + 4   # zero centered
+        idx_y = int(100.0 * y / 256.0 * 4) + 4   # zero centered
+        idx_z = int(100.0 * z / 256.0 * 4) + 4   # counted from 0
+        if idx_x >= 0 and idx_x < 8 and idx_y >= 0 and idx_y < 8 and idx_z >= 0 and idx_z < 8:
             if not point_grid[idx_x, idx_y, idx_z]:
                 point_grid[idx_x, idx_y, idx_z] = []
                 label_grid[idx_x, idx_y, idx_z] = []
@@ -440,7 +451,7 @@ def load_xyzl_oct(filename, n_y):
     # generate lists of subgrids and its histogram for labels
     stime = time.time()
     sub_grids = np.array(np.zeros((len(indices),16,16,16,1)), dtype=np.float)
-    sub_label = np.array(np.zeros((len(indices),16,16,16)), dtype=np.int)
+    sub_label = np.array(np.zeros((len(indices),16,16,16,n_y)), dtype=np.float)
     if len(indices) == 0:
         raise Exception(filename)
 
@@ -452,17 +463,17 @@ def load_xyzl_oct(filename, n_y):
         hist = np.array(np.zeros((n_y,)), dtype=np.float)
         for j in range(0,len(labels)):
             # move the points, so that they are positioned with zero corner of the grid
-            # range of xyz should be [0,32)
+            # range of xyz should be [0,64)
             # convert to cms, add expected zero corner, divide by half extent, multiply by number of voxels
-            x = 100.0 * points[3*j+0] - (index[0] - 8) * 32
-            y = 100.0 * points[3*j+1] - (index[1] - 8) * 32
-            z = 100.0 * points[3*j+2] - (index[2] - 8) * 32
+            x = 100.0 * points[3*j+0] - (index[0] - 4) * 64
+            y = 100.0 * points[3*j+1] - (index[1] - 4) * 64
+            z = 100.0 * points[3*j+2] - (index[2] - 4) * 64
             l = round(labels[j])
             hist[l] = hist[l] + 1
-            # compute indices for grid 16x16x16, which is 32x32x32 cm
-            idx_x = int(x / 2.0)
-            idx_y = int(y / 2.0)
-            idx_z = int(z / 2.0)
+            # compute indices for grid 16x16x16, which is 64x64x64 cm
+            idx_x = int(x / 4.0)
+            idx_y = int(y / 4.0)
+            idx_z = int(z / 4.0)
             sub_grids[i,idx_x,idx_y,idx_z,0] = 1
             sub_label[i,idx_x,idx_y,idx_z] = l
         
@@ -470,10 +481,10 @@ def load_xyzl_oct(filename, n_y):
         label_lst[i,:] = hist
 
     # print("Sub-grids constructed in %f sec" % (time.time() - stime))    
-    return sub_grids, label_lst, sub_label, indices
+    return sub_grids, label_lst, sub_label, indices, deconv_labels
 
 
-def load_xyzl_vis(filename, labels_dict, n_y):
+def load_xyzl_vis(filename, deconvolved_image, n_y):
     xs = []
     ys = []
     zs = []
@@ -498,7 +509,8 @@ def load_xyzl_vis(filename, labels_dict, n_y):
             pointsx.append(x)
             pointsy.append(y)
             pointsz.append(z)
-            labels.append(math.log2(float(splitted[3])))
+            label = int(np.round(math.log2(float(splitted[3]))))
+            labels.append(label_conversion[label])
     # print("Data readed in %f sec" % (time.time() - stime))
     
     # size is 512x512x512 cm for this grid and maximal grid is 256x256x256 voxels
@@ -512,27 +524,20 @@ def load_xyzl_vis(filename, labels_dict, n_y):
     cz = cz / num_points
 
     for i in range(0,num_points):
-        # every 2cm is a voxel, 0,0,0 is at (159,63,0) 
-        # convert to cms, divide by half extent of the box to normalize the value, multiply by number of voxels, add center
         x = pointsx[i] - cx
         y = pointsy[i] - cy
         z = pointsz[i] - cz
-        idx_x = int(100.0 * x / 2.0 / 128.0 * 8 ) + 8   # zero centered
-        idx_y = int(100.0 * y / 2.0 / 128.0 * 8 ) + 8   # zero centered
-        idx_z = int(100.0 * z / 2.0 / 128.0 * 8 ) + 8   # counted from 0
-        if idx_x >= 0 and idx_x < 16 and idx_y >= 0 and idx_y < 16 and idx_z >= 0 and idx_z < 16:
-            x = 100.0 * x - (idx_x - 8) * 32
-            y = 100.0 * y - (idx_y - 8) * 32
-            z = 100.0 * z - (idx_z - 8) * 32
-            predicted_labels = labels_dict[(idx_x,idx_y,idx_z)]
-            idx_x = int(x / 2.0)
-            idx_y = int(y / 2.0)
-            idx_z = int(z / 2.0)
+        # every 4cm is a voxel, 0,0,0 is in the middle
+        # convert to cms, divide by half extent of the box to normalize the value, multiply by number of voxels, add center
+        idx_x = int(100.0 * x / 16.0) + 16   # zero centered
+        idx_y = int(100.0 * y / 16.0) + 16   # zero centered
+        idx_z = int(100.0 * z / 16.0) + 16   # zero centered
+        if idx_x >= 0 and idx_x < 32 and idx_y >= 0 and idx_y < 32 and idx_z >= 0 and idx_z < 32:
             xs.append(x)
             ys.append(y)
             zs.append(z)
             vs_hat.append(labels[i])
-            vs.append(float(predicted_labels[idx_x,idx_y,idx_z]))
+            vs.append(float(deconvolved_image[idx_x,idx_y,idx_z]))
 
     xs.append(0)
     ys.append(0)

@@ -614,36 +614,4 @@ if __name__ == '__main__':
 
     # get_visible_set_sparse("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-sparse-seen/", 32, "test", 5)
     # sanity check on saved data
-    occ,lab,_,_ = dl.load_xyzl_oct("D:\\janovrom\\Unity\\ModelChodby\\data-out\\low-res\\data-00000000.xyzl", 9)
-    xs = []
-    ys = []
-    zs = []
-    vs = []
-    xs.append(0)
-    ys.append(0)
-    zs.append(0)
-    vs.append(0)
-    for i in range(0, 320):
-        for j in range(0, 128):
-            for k in range(0, 192):
-                if occ[i,j,k] > 0:
-                    xs.append(i)
-                    ys.append(j)
-                    zs.append(k)
-                    vs.append(math.log2(lab[i,j,k]))
-
-    xs.append(0)
-    ys.append(0)
-    zs.append(0)
-    vs.append(8)
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    cm = LinearSegmentedColormap.from_list("alpha", [(0.0,0.0,0.0,0.0), (1.0,0.0,0.0,1.0)])
-    # ax.scatter(xs, ys, zs, c=[1.0, 0.0, 0.0, 0.8], marker='p')
-    ax.scatter(xs, ys, zs, c=vs, cmap=plt.get_cmap("Set1"), marker='p')
-    ax.set_xlabel('X Label')
-    ax.set_ylabel('Y Label')
-    ax.set_zlabel('Z Label')
-
-
-    plt.show()     
+    dl.load_xyzl("E:\\janovrom\\Python\\3d-object-recognition\\SegData\\gauc-0.xyzl")   
