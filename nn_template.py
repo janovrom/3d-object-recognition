@@ -63,6 +63,9 @@ class dataset_template:
     def num_mini_batches(self, dataset):
         return dataset[dataset_template.NUMBER_BATCHES]
 
+    def num_examples(self, dataset):
+        return dataset[dataset_template.NUMBER_EXAMPLES]
+
 
 class nn_template:
 

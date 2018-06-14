@@ -354,9 +354,9 @@ def load_xyzl(filename):
     plt.show()
 
 # conversion label array
-label_conversion = [0, 1, 2, 3, 4, 0, 0, 0, 8]
+label_conversion = [0, 1, 2, 3, 4, 0, 0, 0, 0]
 '''label_dict = {
-    "BACKGROUND"    : 0,
+    "none"          : 0,
     "CHAIR"         : 1,
     "DESK"          : 2,
     "COUCH"         : 3,
@@ -364,7 +364,7 @@ label_conversion = [0, 1, 2, 3, 4, 0, 0, 0, 8]
     "WALL"          : 5,
     "FLOOR"         : 6,
     "WOOD"          : 7,
-    "NONE"          : 8     
+    "background"    : 8     
 }'''
 
 def load_xyzl_oct(filename, n_y):
@@ -398,44 +398,60 @@ def load_xyzl_oct(filename, n_y):
     stime = time.time()
     pointcloud = np.array(points)
     num_points = int(pointcloud.shape[0])
-    point_grid = np.array(np.zeros((8,8,8)), dtype=np.object)
-    label_grid = np.array(np.zeros((8,8,8)), dtype=np.object)
+    point_grid = np.array(np.zeros((16,16,16)), dtype=np.object)
+    label_grid = np.array(np.zeros((16,16,16)), dtype=np.object)
     indices = []
 
     cx = cx / (num_points/3)
     cy = cy / (num_points/3)
     cz = cz / (num_points/3)
 
+    min_x = np.min(pointcloud[0::3])
+    min_y = np.min(pointcloud[1::3])
+    min_z = np.min(pointcloud[2::3])
+    max_x = np.max(pointcloud[0::3])
+    max_y = np.max(pointcloud[1::3])
+    max_z = np.max(pointcloud[2::3])
+    # Compute sizes 
+    size_x = max_x - min_x
+    size_y = max_y - min_y
+    size_z = max_z - min_z
+    cx = size_x / 2.0 + min_x
+    cy = size_y / 2.0 + min_y
+    cz = size_z / 2.0 + min_z
+    max_size = max(size_x, max(size_y, size_z)) / 2.0
+
     # get the deconv labels
-    deconv_hists = np.array(np.zeros((128,128,n_y)), dtype=np.int)
-    deconv_labels = np.array(np.zeros((128,128)), dtype=np.int)
+    deconv_hists = np.array(np.zeros((32,32,32,n_y)), dtype=np.int)
+    deconv_labels = np.array(np.zeros((32,32,32)), dtype=np.int)
     for i in range(0,num_points,3):
-        x = pointcloud[i+0] - cx
-        y = pointcloud[i+1] - cy
-        z = pointcloud[i+2] - cz
-        # every 4cm is a voxel, 0,0,0 is in the middle
-        # convert to cms, divide by half extent of the box to normalize the value, multiply by number of voxels, add center
-        idx_x = int(100.0 * x / 256.0 * 64) + 64   # zero centered
-        idx_y = int(100.0 * y / 256.0 * 64) + 64   # zero centered
-        idx_z = int(100.0 * z / 256.0 * 64) + 64   # zero centered
-        if idx_x >= 0 and idx_x < 128 and idx_y >= 0 and idx_y < 128 and idx_z >= 0 and idx_z < 128:
-            deconv_hists[idx_x, idx_y, labels[int(i/3)]] = deconv_hists[idx_x, idx_y, labels[int(i/3)]] + 1
+        x = (pointcloud[i+0] - cx) / max_size
+        y = (pointcloud[i+1] - cy) / max_size
+        z = (pointcloud[i+2] - cz) / max_size
+        # compute indices for grid 16x16x16, which is 64x64x64 cm
+        idx_x = int((int(x * 16) + 16) / 32 * 31)
+        idx_y = int((int(y * 16) + 16) / 32 * 31)
+        idx_z = int((int(z * 16) + 16) / 32 * 31)
+        if idx_x >= 0 and idx_x < 32 and idx_y >= 0 and idx_y < 32 and idx_z >= 0 and idx_z < 32:
+            deconv_hists[idx_x, idx_y, idx_z, labels[int(i/3)]] = deconv_hists[idx_x, idx_y, idx_z, labels[int(i/3)]] + 1
+
 
     # make it a distribution
     deconv_labels = np.argmax(deconv_hists, axis=-1)
+    # plt.imshow(deconv_labels)
+    # plt.show()
     # sanity check
     # print(deconv_labels.shape)
 
     for i in range(0,num_points,3):
-        x = pointcloud[i+0] - cx
-        y = pointcloud[i+1] - cy
-        z = pointcloud[i+2] - cz
-        # every 4cm is a voxel, 0,0,0 is in the middle
-        # convert to cms, divide by half extent of the box to normalize the value, multiply by number of voxels, add center
-        idx_x = int(100.0 * x / 256.0 * 4) + 4   # zero centered
-        idx_y = int(100.0 * y / 256.0 * 4) + 4   # zero centered
-        idx_z = int(100.0 * z / 256.0 * 4) + 4   # counted from 0
-        if idx_x >= 0 and idx_x < 8 and idx_y >= 0 and idx_y < 8 and idx_z >= 0 and idx_z < 8:
+        x = (pointcloud[i+0] - cx) / max_size
+        y = (pointcloud[i+1] - cy) / max_size
+        z = (pointcloud[i+2] - cz) / max_size
+        # compute indices for grid 16x16x16, which is 64x64x64 cm
+        idx_x = int((int(x * 8) + 8) / 16 * 15)
+        idx_y = int((int(y * 8) + 8) / 16 * 15)
+        idx_z = int((int(z * 8) + 8) / 16 * 15)
+        if idx_x >= 0 and idx_x < 16 and idx_y >= 0 and idx_y < 16 and idx_z >= 0 and idx_z < 16:
             if not point_grid[idx_x, idx_y, idx_z]:
                 point_grid[idx_x, idx_y, idx_z] = []
                 label_grid[idx_x, idx_y, idx_z] = []
@@ -450,38 +466,97 @@ def load_xyzl_oct(filename, n_y):
 
     # generate lists of subgrids and its histogram for labels
     stime = time.time()
-    sub_grids = np.array(np.zeros((len(indices),16,16,16,1)), dtype=np.float)
-    sub_label = np.array(np.zeros((len(indices),16,16,16,n_y)), dtype=np.float)
+    sub_grids = []#np.array(np.zeros((len(indices),32,32,32,1)), dtype=np.float)
+    sub_label = []#np.array(np.zeros((len(indices),32,32,32,n_y)), dtype=np.float)
+    sub_indices = []
+    label_lst = []#np.zeros((len(indices), n_y))
     if len(indices) == 0:
         raise Exception(filename)
 
-    label_lst = np.zeros((len(indices), n_y))
+    BBB = 1
     for i in range(0, len(indices)):
         index = indices[i]
         points = np.array(point_grid[index[0],index[1],index[2]])
         labels = label_grid[index[0],index[1],index[2]]
+
+        if len(labels) < 10:
+            continue
+
         hist = np.array(np.zeros((n_y,)), dtype=np.float)
+        xs = []
+        ys = []
+        zs = []
+        px = []
+        py = []
+        pz = []
+        min_x = np.min(points[0::3])
+        min_y = np.min(points[1::3])
+        min_z = np.min(points[2::3])
+        max_x = np.max(points[0::3])
+        max_y = np.max(points[1::3])
+        max_z = np.max(points[2::3])
+        # Compute sizes 
+        size_x = max_x - min_x
+        size_y = max_y - min_y
+        size_z = max_z - min_z
+        cx = size_x / 2.0 + min_x
+        cy = size_y / 2.0 + min_y
+        cz = size_z / 2.0 + min_z
+        max_size = max(size_x, max(size_y, size_z)) / 2.0
+        sub_grid = np.zeros((32,32,32,1))
+        sub_lab = np.zeros((32,32,32))
         for j in range(0,len(labels)):
             # move the points, so that they are positioned with zero corner of the grid
             # range of xyz should be [0,64)
             # convert to cms, add expected zero corner, divide by half extent, multiply by number of voxels
-            x = 100.0 * points[3*j+0] - (index[0] - 4) * 64
-            y = 100.0 * points[3*j+1] - (index[1] - 4) * 64
-            z = 100.0 * points[3*j+2] - (index[2] - 4) * 64
+            x = (points[3*j+0] - cx) / max_size
+            y = (points[3*j+1] - cy) / max_size
+            z = (points[3*j+2] - cz) / max_size
             l = round(labels[j])
             hist[l] = hist[l] + 1
             # compute indices for grid 16x16x16, which is 64x64x64 cm
-            idx_x = int(x / 4.0)
-            idx_y = int(y / 4.0)
-            idx_z = int(z / 4.0)
-            sub_grids[i,idx_x,idx_y,idx_z,0] = 1
-            sub_label[i,idx_x,idx_y,idx_z] = l
-        
+            idx_x = int((int(x * 16) + 16) / 32 * 31)
+            idx_y = int((int(y * 16) + 16) / 32 * 31)
+            idx_z = int((int(z * 16) + 16) / 32 * 31)
+            
+            sub_grid[idx_x,idx_y,idx_z,0] = 1
+            sub_lab[idx_x,idx_y,idx_z] = l
+            
+            px.append(points[3*j+0])
+            py.append(points[3*j+1])
+            pz.append(points[3*j+2])
+            xs.append(idx_x)
+            ys.append(idx_y)
+            zs.append(idx_z)
+
+        sub_label.append(sub_lab)
+        sub_grids.append(sub_grid)
+        sub_indices.append(index)
         hist = hist / np.linalg.norm(hist)
-        label_lst[i,:] = hist
+        label_lst.append(hist)
+        # viz
+        if BBB == 0:
+            fig = plt.figure()
+            fig2 = plt.figure()
+            ax2 = fig2.add_subplot(111, projection='3d')
+            ax = fig.add_subplot(111, projection='3d')
+            ax.scatter(xs, ys, zs, c=[1.0, 0.0, 0.0, 0.8], marker='p')
+            ax2.scatter(px, py, pz, c=[1.0, 0.0, 0.0, 0.8], marker='p')
+            ax.set_xlabel('X Label')
+            ax.set_ylabel('Y Label')
+            ax.set_zlabel('Z Label')
+            ax.set_xlim(0,32)
+            ax.set_ylim(0,32)
+            ax.set_zlim(0,32)
+            ax2.set_xlabel('X Label')
+            ax2.set_ylabel('Y Label')
+            ax2.set_zlabel('Z Label')
+            plt.show()
+            # BBB = 1
+
 
     # print("Sub-grids constructed in %f sec" % (time.time() - stime))    
-    return sub_grids, label_lst, sub_label, indices, deconv_labels
+    return np.array(sub_grids), np.array(label_lst), np.array(sub_label), np.array(sub_indices), deconv_labels
 
 
 def load_xyzl_vis(filename, deconvolved_image, n_y):
@@ -522,22 +597,37 @@ def load_xyzl_vis(filename, deconvolved_image, n_y):
     cx = cx / num_points
     cy = cy / num_points
     cz = cz / num_points
+    min_x = np.min(pointsx)
+    min_y = np.min(pointsy)
+    min_z = np.min(pointsz)
+    max_x = np.max(pointsx)
+    max_y = np.max(pointsy)
+    max_z = np.max(pointsz)
+    # Compute sizes 
+    size_x = max_x - min_x
+    size_y = max_y - min_y
+    size_z = max_z - min_z
+    cx = size_x / 2.0 + min_x
+    cy = size_y / 2.0 + min_y
+    cz = size_z / 2.0 + min_z
+    max_size = max(size_x, max(size_y, size_z)) / 2.0
 
+    # get the deconv labels
     for i in range(0,num_points):
-        x = pointsx[i] - cx
-        y = pointsy[i] - cy
-        z = pointsz[i] - cz
-        # every 4cm is a voxel, 0,0,0 is in the middle
-        # convert to cms, divide by half extent of the box to normalize the value, multiply by number of voxels, add center
-        idx_x = int(100.0 * x / 16.0) + 16   # zero centered
-        idx_y = int(100.0 * y / 16.0) + 16   # zero centered
-        idx_z = int(100.0 * z / 16.0) + 16   # zero centered
+        x = (pointsx[i] - cx) / max_size
+        y = (pointsy[i] - cy) / max_size
+        z = (pointsz[i] - cz) / max_size
+        # compute indices for grid 16x16x16, which is 64x64x64 cm
+        idx_x = int((int(x * 16) + 16) / 32 * 31)
+        idx_y = int((int(y * 16) + 16) / 32 * 31)
+        idx_z = int((int(z * 16) + 16) / 32 * 31)
         if idx_x >= 0 and idx_x < 32 and idx_y >= 0 and idx_y < 32 and idx_z >= 0 and idx_z < 32:
             xs.append(x)
             ys.append(y)
             zs.append(z)
             vs_hat.append(labels[i])
-            vs.append(float(deconvolved_image[idx_x,idx_y]))
+            vs.append(float(deconvolved_image[idx_x,idx_y,idx_z]))
+
 
     xs.append(0)
     ys.append(0)
@@ -567,3 +657,82 @@ def load_xyzl_vis(filename, deconvolved_image, n_y):
     ax2.set_zlabel('Z')
 
     plt.show()     
+
+
+def load_xyzl_as_occlussion(filename, grid_size=31):
+    points = []
+    name = os.path.basename(filename).split("-")[0]
+    with open(filename, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            splitted = line.split(" ")
+            points.append(-float(splitted[0]))
+            points.append(float(splitted[1]))
+            points.append(float(splitted[2]))
+
+    pointcloud = np.array(points)
+    num_points = int(pointcloud.shape[0])
+    # Find point cloud min and max
+    min_x = np.min(pointcloud[0::3])
+    min_y = np.min(pointcloud[1::3])
+    min_z = np.min(pointcloud[2::3])
+    max_x = np.max(pointcloud[0::3])
+    max_y = np.max(pointcloud[1::3])
+    max_z = np.max(pointcloud[2::3])
+    # Compute sizes 
+    size_x = max_x - min_x
+    size_y = max_y - min_y
+    size_z = max_z - min_z
+    
+    max_size = np.max([size_x, size_y, size_z])
+    # print("%s has size=(%f, %f, %f) meters\n" % (os.path.basename(filename), size_x, size_y, size_z))
+    occupancy_grid = np.array(np.zeros((grid_size,grid_size,grid_size)), dtype=np.float32)
+    max_size = np.max([size_x, size_y, size_z]) / 2
+    # print("%s has size=(%f, %f, %f) meters\n" % (os.path.basename(filename), size_x, size_y, size_z))
+    cx = size_x / 2 + min_x
+    cy = size_y / 2 + min_y
+    cz = size_z / 2 + min_z
+    extent = int(grid_size / 2)
+
+    xs = []
+    ys = []
+    zs = []
+    px = []
+    py = []
+    pz = []
+    BBB = 1
+    for i in range(0,num_points,3):
+        x = pointcloud[i+0]
+        y = pointcloud[i+1]
+        z = pointcloud[i+2]
+        idx_x = int(((x - cx) * extent / max_size + extent) * (grid_size - 1) / (extent * 2))
+        idx_y = int(((y - cy) * extent / max_size + extent) * (grid_size - 1) / (extent * 2))
+        idx_z = int(((z - cz) * extent / max_size + extent) * (grid_size - 1) / (extent * 2))
+        occupancy_grid[idx_x, idx_y, idx_z] = 1
+        px.append(x)
+        py.append(y)
+        pz.append(z)
+        xs.append(idx_x)
+        ys.append(idx_y)
+        zs.append(idx_z)
+
+    # viz
+    if BBB == 0:
+        fig = plt.figure()
+        fig2 = plt.figure()
+        ax2 = fig2.add_subplot(111, projection='3d')
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(xs, ys, zs, c=[1.0, 0.0, 0.0, 0.8], marker='p')
+        ax2.scatter(px, py, pz, c=[1.0, 0.0, 0.0, 0.8], marker='p')
+        ax.set_xlabel('X Label')
+        ax.set_ylabel('Y Label')
+        ax.set_zlabel('Z Label')
+        ax.set_xlim(0,grid_size-1)
+        ax.set_ylim(0,grid_size-1)
+        ax.set_zlim(0,grid_size-1)
+        ax2.set_xlabel('X Label')
+        ax2.set_ylabel('Y Label')
+        ax2.set_zlabel('Z Label')
+        plt.show()
+
+    return occupancy_grid

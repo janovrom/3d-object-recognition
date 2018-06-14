@@ -7,16 +7,17 @@ import data_loader as dl
 class Segmentations(dataset_template):
     
     label_dict = {
-        "BACKGROUND"    : 0,
-        "CHAIR"         : 1,
-        "DESK"          : 2,
-        "COUCH"         : 3,
-        "TABLE"         : 4,
+        "background"    : 0,
+        "zidle"         : 1,
+        "stul"          : 2,
+        "gauc"          : 3,
+        "stulgauc"      : 4,
         "WALL"          : 5,
         "FLOOR"         : 6,
         "WOOD"          : 7,
-        "NONE"          : 8     
+        "none"          : 8     
     }
+    label_conversion = [0, 1, 2, 3, 4, 0, 0, 0, 0]
 
     def __load_dataset(self, path, data_dict):
         if os.path.exists(path):
@@ -47,15 +48,32 @@ class Segmentations(dataset_template):
         self.__load_dataset(os.path.join(datapath, "d/dev"), self.dev_d)
 
 
-    def next_mini_batch(self, dataset):
+    def next_class_mini_batch(self, dataset):
+        data = []
+        labels = []
+        names = []
         start = dataset[dataset_template.CURRENT_BATCH] * self.batch_size
+        end = min(dataset[dataset_template.NUMBER_EXAMPLES], start + self.batch_size)
+
+        for fname in dataset[dataset_template.DATASET][start:end]:
+            filename = os.path.join(dataset[dataset_template.PATH], fname)
+            data.append(np.reshape(dl.load_xyzl_as_occlussion(filename, self.shape[0]), self.shape))
+            labels.append(Segmentations.label_conversion[Segmentations.label_dict[fname.split("-")[0]]])
+            names.append(fname)
+
+        dataset[dataset_template.CURRENT_BATCH] += 1
+        return np.array(data), np.array(labels), np.array(names)
+
+
+    def next_mini_batch(self, dataset):
+        start = dataset[dataset_template.CURRENT_BATCH]
 
         fname = dataset[dataset_template.DATASET][start]
         filename = os.path.join(dataset[dataset_template.PATH], fname)
         occ, lab, mask, idxs, deconv_labels = dl.load_xyzl_oct(filename, self.num_classes)
 
         dataset[dataset_template.CURRENT_BATCH] += 1
-        return occ, lab, mask, idxs, filename, np.reshape(deconv_labels, [1,128,128])
+        return occ, lab, mask, idxs, filename, np.reshape(deconv_labels, [1,32,32,32])
 
 
     @staticmethod
