@@ -11,3 +11,7 @@
 /ModelNet-data*
 /Engine*
 *.ckpt*
+/SegData
+/Shape*
+/Mesh*
+*.VRC2

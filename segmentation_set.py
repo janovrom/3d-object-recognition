@@ -57,9 +57,10 @@ class Segmentations(dataset_template):
 
         for fname in dataset[dataset_template.DATASET][start:end]:
             filename = os.path.join(dataset[dataset_template.PATH], fname)
-            data.append(np.reshape(dl.load_xyzl_as_occlussion(filename, self.shape[0]), self.shape))
-            labels.append(Segmentations.label_conversion[Segmentations.label_dict[fname.split("-")[0]]])
-            names.append(fname)
+            x, y = dl.load_xyzl_as_occlussion(filename, self.shape[0])
+            data.append(np.reshape(x, self.shape))
+            labels.append(y)
+            names.append(filename)
 
         dataset[dataset_template.CURRENT_BATCH] += 1
         return np.array(data), np.array(labels), np.array(names)
