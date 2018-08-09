@@ -37,11 +37,12 @@ class Parts(dataset_template):
         if os.path.exists(path):
             data_dict[dataset_template.PATH] = path
             cat_idx = 0
-            num_parts = 1
+            num_parts = 0
             data_dict[dataset_template.DATASET] = []
             dict_name = data_dict["name"]
             # list all category directories in test/dev/train dataset
             for cat_dir in os.listdir(os.path.join(path, dict_name + "_data")):
+                stime = time.time()
                 if cat_dir not in Parts.Labels:
                     Parts.Labels[cat_dir] = {}
                     Parts.Labels[cat_dir][Parts.CATEGORY] = cat_idx
@@ -55,12 +56,18 @@ class Parts(dataset_template):
                     # get all files in label and data directories
                     cat_files = os.path.join(path, dict_name + "_data", cat_dir)
                     cat_labels = os.path.join(path, dict_name + "_label", cat_dir)
-                    for pts,lab in zip(os.listdir(cat_files),os.listdir(cat_labels)):
+                    iteration = 0
+                    lst_cat_files = os.listdir(cat_files)
+                    lst_cat_labels = os.listdir(cat_labels)
+                    for pts,lab in zip(lst_cat_files, lst_cat_labels):
+                        print("\rLoading category %s: %d %%" % (cat_dir, int(iteration/len(lst_cat_files)*100)), end='', flush=True)
                         occ,seg,part_count,cloud,labels = dl.load_binvox(os.path.join(cat_files,pts),os.path.join(cat_labels,lab),label_start=num_parts)
                         Parts.Labels[cat_dir][Parts.PART_COUNT] = max(Parts.Labels[cat_dir][Parts.PART_COUNT], part_count)
                         data_dict[dataset_template.DATASET].append((np.reshape(occ, self.shape),seg,Parts.Labels[cat_dir][Parts.CATEGORY],cat_dir+"-"+pts,cloud,labels))
+                        iteration += 1
                 
                 num_parts += Parts.Labels[cat_dir][Parts.PART_COUNT]
+                print("\rCategory %s loaded in %f sec" % (cat_dir, time.time() - stime))
 
             self.num_classes_parts = max(num_parts, self.num_classes_parts)
             self.num_classes = max(cat_idx, self.num_classes)
@@ -286,7 +293,7 @@ class Parts(dataset_template):
         iou_all = np.zeros(ncategory)
         eps = 0.0000001
         for i in range(0, ncategory):
-            print("Evaluating category %s" % Parts.Labels[str(i)],end="")
+            print("Evaluating category %s" % Parts.Labels[str(i)],end="", flush=True)
             category = files_gt[i]
             path_gt_cat = os.path.join(path_gt, category)
             path_res_cat = os.path.join(path_res, category)
@@ -307,8 +314,8 @@ class Parts(dataset_template):
 
                 with open(os.path.join(path_gt_cat,gt), "rb") as f:
                     g = np.load(f)
-                    nparts_min = min(np.min(g),nparts)
-                    nparts_max = max(np.max(g),nparts)
+                    nparts_min = min(np.min(g),nparts_min)
+                    nparts_max = max(np.max(g),nparts_max)
                     ground_truths.append(g)
 
             nparts = nparts_max - nparts_min + 1
