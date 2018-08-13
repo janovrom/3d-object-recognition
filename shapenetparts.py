@@ -273,6 +273,9 @@ class Parts(dataset_template):
                 idx_x = int(((x - cx) * extent / max_size + extent) * (self.shape[0] - 1) / (extent * 2))
                 idx_y = int(((y - cy) * extent / max_size + extent) * (self.shape[0] - 1) / (extent * 2))
                 idx_z = int(((z - cz) * extent / max_size + extent) * (self.shape[0] - 1) / (extent * 2))
+                # idx_x = int(((x - cx) * extent / size_x * 2.0 + extent) * (self.shape[0] - 1) / (extent * 2))
+                # idx_y = int(((y - cy) * extent / size_y * 2.0 + extent) * (self.shape[0] - 1) / (extent * 2))
+                # idx_z = int(((z - cz) * extent / size_z * 2.0 + extent) * (self.shape[0] - 1) / (extent * 2))
                 segmentation_res_pts.append(segmentation_res[idx_x,idx_y,idx_z])
 
             segmentation_res_pts = np.array(segmentation_res_pts)

@@ -33,10 +33,10 @@ class PartsNet():
         return Z
 
 
-    def forward_propagation(self, X, n_cat, n_seg, keep_prob, bn_training):
+    def forward_propagation2(self, X, n_cat, n_seg, keep_prob, bn_training):
         self.layer_idx = 0
 
-        A0 = self.convolution(X, [5,5,5,1,32], padding="SAME") 
+        A0 = self.convolution(X*2-1, [5,5,5,1,32], padding="SAME") 
         D0 = tf.nn.dropout(A0, keep_prob)
         D0 = tf.layers.batch_normalization(D0, training=bn_training)
         A1 = self.convolution(D0, [5,5,5,32,32], padding="SAME")
@@ -96,12 +96,12 @@ class PartsNet():
         return A_fv, A_class, U_mask, U_class        
 
 
-    def forward_propagation2(self, X, n_cat, n_seg, keep_prob, bn_training):
+    def forward_propagation(self, X, n_cat, n_seg, keep_prob, bn_training):
         self.layer_idx = 0
         # imagine that the net operates over 32x32x32 blocks
         # feature vector learning
         # IN 32
-        A0 = self.convolution(X, [5,5,5,1,32], padding="SAME") 
+        A0 = self.convolution(X*2-1, [5,5,5,1,32], padding="SAME") 
         D0 = tf.nn.dropout(A0, keep_prob)
         D0 = tf.layers.batch_normalization(D0, training=bn_training)        
 
@@ -117,12 +117,13 @@ class PartsNet():
         
         M2 = tf.nn.max_pool3d(D2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 3
         A3 = self.convolution(M2, [3,3,3,128,256], padding="VALID") #1x1x1x256
-        A_fv = self.convolution(A3, [1,1,1,256,512], padding="VALID") #1x1x1x256
-        A_class = self.convolution(A_fv, [1,1,1,512,256], padding="VALID")
-        A_class = tf.reshape(self.convolution(A_class, [1,1,1,256,n_cat], padding="VALID", act=None), [-1, n_cat])
+        A4 = self.convolution(A3, [1,1,1,256,512], padding="VALID") #1x1x1x256
+        A5 = self.convolution(A4, [1,1,1,512,256], padding="VALID")
+        A_fv = tf.reshape(self.convolution(A5, [1,1,1,256,n_cat], padding="VALID", act=None), [-1, n_cat])
+        A_class = tf.argmax(tf.nn.softmax(A_fv), axis=-1)
         print(A_class.shape)
 
-        U0 = self.convolution(A_fv, [1,1,1,512,256], padding="VALID") #1x1x1x256
+        U0 = self.convolution(A4, [1,1,1,512,256], padding="VALID") #1x1x1x256
 
         U_t = tf.tile(U0, [1,8,8,8,1])
         U_concat = tf.concat([M1, U_t], axis=-1)
@@ -180,8 +181,8 @@ class PartsNet():
         # seg_weights = np.array(seg_weights)
         # U = tf.convert_to_tensor(seg_weights, dtype=tf.float32) * U
 
-        # weighted_entropy_seg = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=Y_seg, logits=U) #* Xrep
-        weighted_entropy_seg = tf.losses.sparse_softmax_cross_entropy(Y_seg, U) #* Xrep
+        weighted_entropy_seg = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=Y_seg, logits=U) #* Xrep
+        # weighted_entropy_seg = tf.losses.sparse_softmax_cross_entropy(Y_seg, U) #* Xrep
         # weighted_entropy_seg = weights * tf.losses.sparse_softmax_cross_entropy(Y_seg, U) #* Xrep
         # l2loss = tf.nn.l2_loss(predictions - one_hot_labels)
         # c = l2loss + tf.reduce_sum(entropy_cat)
@@ -346,5 +347,5 @@ class PartsNet():
 
 if __name__ == "__main__":
     s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData")
-    s.run_model(load=True, train=True,visualize=False)
+    s.run_model(load=False, train=True,visualize=False)
     # s.evaluate_iou_results()
