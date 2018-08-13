@@ -307,8 +307,8 @@ class Parts(dataset_template):
 
                 with open(os.path.join(path_gt_cat,gt), "rb") as f:
                     g = np.load(f)
-                    nparts_min = min(np.min(g),nparts)
-                    nparts_max = max(np.max(g),nparts)
+                    nparts_min = min(np.min(g),nparts_min)
+                    nparts_max = max(np.max(g),nparts_max)
                     ground_truths.append(g)
 
             nparts = nparts_max - nparts_min + 1

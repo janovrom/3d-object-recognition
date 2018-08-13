@@ -177,7 +177,7 @@ class PartsNet():
         # weights = np.array(weights)
         # segmentation_weights = tf.convert_to_tensor(weights, dtype=tf.float32) * Xrep
 
-        weighted_entropy_seg = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=Y_seg, logits=U) #* Xrep
+        weighted_entropy_seg = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=Y_seg, logits=U) * Xrep
         c = tf.reduce_sum(weighted_entropy_seg) + tf.reduce_sum(entropy_cat)
         # c = tf.losses.mean_pairwise_squared_error(one_hot_labels, predictions, weights=segmentation_weights) + tf.reduce_sum(entropy_cat)
 
