@@ -776,6 +776,9 @@ def load_binvox_np(pointcloud, labels, grid_size=32, visualize=False):
         x = pointcloud[i+0]
         y = pointcloud[i+1]
         z = pointcloud[i+2]
+        # idx_x = int(((x - cx) * extent / size_x * 2.0 + extent) * (grid_size - 1) / (extent * 2))
+        # idx_y = int(((y - cy) * extent / size_y * 2.0 + extent) * (grid_size - 1) / (extent * 2))
+        # idx_z = int(((z - cz) * extent / size_z * 2.0 + extent) * (grid_size - 1) / (extent * 2))
         idx_x = int(((x - cx) * extent / max_size + extent) * (grid_size - 1) / (extent * 2))
         idx_y = int(((y - cy) * extent / max_size + extent) * (grid_size - 1) / (extent * 2))
         idx_z = int(((z - cz) * extent / max_size + extent) * (grid_size - 1) / (extent * 2))
@@ -882,6 +885,9 @@ def load_binvox(pts, sgs, grid_size=32, label_start=0, visualize=False):
         idx_x = int(((x - cx) * extent / max_size + extent) * (grid_size - 1) / (extent * 2))
         idx_y = int(((y - cy) * extent / max_size + extent) * (grid_size - 1) / (extent * 2))
         idx_z = int(((z - cz) * extent / max_size + extent) * (grid_size - 1) / (extent * 2))
+        # idx_x = int(((x - cx) * extent / size_x * 2.0 + extent) * (grid_size - 1) / (extent * 2))
+        # idx_y = int(((y - cy) * extent / size_y * 2.0 + extent) * (grid_size - 1) / (extent * 2))
+        # idx_z = int(((z - cz) * extent / size_z * 2.0 + extent) * (grid_size - 1) / (extent * 2))
         occupancy_grid[idx_x, idx_y, idx_z] = 1
         if not hist_grid[idx_x, idx_y, idx_z]:
             hist_grid[idx_x, idx_y, idx_z] = []
@@ -949,8 +955,8 @@ def load_binvox(pts, sgs, grid_size=32, label_start=0, visualize=False):
     return occupancy_grid, label_grid, label_count, pointcloud, labels
 
 
-# if __name__ == "__main__":
-#     path_pt = ".\\3d-object-recognition\\ShapePartsData\\train\\train_data\\cap"
-#     path_sg = ".\\3d-object-recognition\\ShapePartsData\\train\\train_label\\cap"
-#     for pts,seg in zip(os.listdir(path_pt), os.listdir(path_sg)):
-#         load_binvox(os.path.join(path_pt,pts), os.path.join(path_sg,seg), grid_size=32, label_start=0, visualize=True)
+if __name__ == "__main__":
+    path_pt = ".\\3d-object-recognition\\ShapePartsData\\train\\train_data\\cap"
+    path_sg = ".\\3d-object-recognition\\ShapePartsData\\train\\train_label\\cap"
+    for pts,seg in zip(os.listdir(path_pt), os.listdir(path_sg)):
+        load_binvox(os.path.join(path_pt,pts), os.path.join(path_sg,seg), grid_size=32, label_start=0, visualize=True)
