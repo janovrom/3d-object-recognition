@@ -37,7 +37,7 @@ class Parts(dataset_template):
         if os.path.exists(path):
             data_dict[dataset_template.PATH] = path
             cat_idx = 0
-            num_parts = 1
+            num_parts = 0
             data_dict[dataset_template.DATASET] = []
             dict_name = data_dict["name"]
             # list all category directories in test/dev/train dataset
@@ -307,8 +307,8 @@ class Parts(dataset_template):
 
                 with open(os.path.join(path_gt_cat,gt), "rb") as f:
                     g = np.load(f)
-                    nparts_min = min(np.min(g),nparts)
-                    nparts_max = max(np.max(g),nparts)
+                    nparts_min = min(np.min(g),nparts_min)
+                    nparts_max = max(np.max(g),nparts_max)
                     ground_truths.append(g)
 
             nparts = nparts_max - nparts_min + 1
