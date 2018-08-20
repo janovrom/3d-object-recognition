@@ -256,7 +256,7 @@ class PartsNet():
 
 
 
-    def run_model(self, load=False, train=True,visualize=True):
+    def run_model(self, load=False, train=True,visualize=True, in_memory=True):
         log_dir = os.path.join("./3d-object-recognition", self.name)
         tf.reset_default_graph()
         n_cat = self.dataset.num_classes
@@ -284,11 +284,11 @@ class PartsNet():
         writer.flush()
             
 
-        def accuracy_test(dataset, data_dict):
+        def accuracy_test(dataset, data_dict, in_memory=True):
             acc = 0
             acc_cat = 0
             dataset.restart_mini_batches(data_dict)
-            dataset.clear_segmentation(data_dict)
+            dataset.clear_segmentation(data_dict, in_memory=in_memory)
             for i in range(dataset.num_mini_batches(data_dict)):
                 stime = time.time()
                 occ,seg,cat,names,points,lbs = self.dataset.next_mini_batch(data_dict)
@@ -302,15 +302,16 @@ class PartsNet():
                 acc_cat = acc_cat + np.sum(cat == predicted_category) / predicted_category.shape[0]
 
                 for j in range(0, deconvolved_images.shape[0]):
-                    dataset.save_segmentation(lbs[j], deconvolved_images[j], names[j], points[j], data_dict)
+                    dataset.save_segmentation(lbs[j], deconvolved_images[j], names[j], points[j], data_dict, in_memory=in_memory)
  
                 if visualize:
                     for j in range(0, deconvolved_images.shape[0]):
                         print(names[j])
                         dataset.vizualise_batch(seg[j],deconvolved_images[j],cat[j],predicted_category[j],xresh[j],names[j])
 
+                print("\rEvaluating %d %%..." % (i*100 / dataset.num_mini_batches(data_dict)), end="")
 
-            print("Deconvolution average accuracy %f" % (acc / dataset.num_mini_batches(data_dict)))
+            print("\rDeconvolution average accuracy %f" % (acc / dataset.num_mini_batches(data_dict)))
             print("Deconvolution average category accuracy %f" % (acc_cat / dataset.num_mini_batches(data_dict)))
             return float(acc / dataset.num_mini_batches(data_dict))
 
@@ -385,8 +386,8 @@ class PartsNet():
             #     self.evaluate_iou_results(self.dataset.train)
             
             print("Evaluate on dev dataset")
-            accuracy_test(self.dataset, self.dataset.dev)
-            self.evaluate_iou_results(self.dataset.dev)
+            accuracy_test(self.dataset, self.dataset.dev, in_memory=in_memory)
+            self.evaluate_iou_results(self.dataset.dev, in_memory=in_memory)
 
             # acc_train = accuracy_test(self.dataset, self.dataset.train)
             # acc_test = accuracy_test(self.dataset, self.dataset.test)
@@ -396,8 +397,8 @@ class PartsNet():
             plt.show()
 
 
-    def evaluate_iou_results(self, data_dict={ "name" : "train"}):
-        return self.dataset.evaluate_iou_results(data_dict)
+    def evaluate_iou_results(self, data_dict={ "name" : "train"}, in_memory=True):
+        return self.dataset.evaluate_iou_results(data_dict, in_memory=in_memory)
 
 
 
@@ -422,4 +423,4 @@ class PartsNet():
 if __name__ == "__main__":
     # s = PartsNet("ShapeNet", "./3d-object-recognition/UnityData")
     s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData")
-    s.run_model(load=True, train=True,visualize=False)
+    s.run_model(load=True, train=False,visualize=False, in_memory=False)

@@ -33,6 +33,8 @@ class Parts(dataset_template):
     CATEGORY = "id"
     PART_COUNT = "part_count"
     PART_START = "part_start"
+    IOU_GROUND_TRUTH = "iou_ground_truths"
+    IOU_PREDICTION = "iou_predictions"
     Labels = {}
 
     def __load_dataset(self, path, data_dict, load):
@@ -218,16 +220,22 @@ class Parts(dataset_template):
         plt.show()
 
 
-    def clear_segmentation(self, data_dict):
-        paths = [os.path.join(self.dataset_path, "segmentation/gt", data_dict["name"]), os.path.join(self.dataset_path, "segmentation/res", data_dict["name"])]
-        for path in paths:
-            for directory in os.listdir(path):
-                directory = os.path.join(path,directory)
-                for seg_file in os.listdir(directory):
-                    os.remove(os.path.join(directory,seg_file))
+    def clear_segmentation(self, data_dict, in_memory=True):
+        if in_memory:
+            for i in range(0,self.num_classes):
+                parts = Parts.Labels[Parts.Labels[str(i)]]
+                parts[Parts.IOU_GROUND_TRUTH] = []
+                parts[Parts.IOU_PREDICTION] = []
+        else:
+            paths = [os.path.join(self.dataset_path, "segmentation/gt", data_dict["name"]), os.path.join(self.dataset_path, "segmentation/res", data_dict["name"])]
+            for path in paths:
+                for directory in os.listdir(path):
+                    directory = os.path.join(path,directory)
+                    for seg_file in os.listdir(directory):
+                        os.remove(os.path.join(directory,seg_file))
 
 
-    def save_segmentation(self, segmentation_gt_pts, segmentation_res, name, points, data_dict):
+    def save_segmentation_disc(self, segmentation_gt_pts, segmentation_res, name, points, data_dict):
         name_split = name.split("-")
         cat_dir = name_split[0]
         fname = name_split[1].split(".")[0]
@@ -285,7 +293,95 @@ class Parts(dataset_template):
             np.save(f, segmentation_res_pts)
 
 
-    def evaluate_iou_results(self, data_dict):
+    def save_segmentation_mem(self, segmentation_gt_pts, segmentation_res, name, points, data_dict):
+        name_split = name.split("-")
+        cat_dir = name_split[0]
+        parts = Parts.Labels[cat_dir]
+        parts[Parts.IOU_GROUND_TRUTH].append(segmentation_gt_pts)
+        # convert point cloud and grid results to point cloud results
+        pointcloud = np.array(points)
+        num_points = int(pointcloud.shape[0])
+        segmentation_res_pts = []
+        # Find point cloud min and max
+        min_x = np.min(pointcloud[0::3])
+        min_y = np.min(pointcloud[1::3])
+        min_z = np.min(pointcloud[2::3])
+        max_x = np.max(pointcloud[0::3])
+        max_y = np.max(pointcloud[1::3])
+        max_z = np.max(pointcloud[2::3])
+        # Compute sizes 
+        size_x = max_x - min_x
+        size_y = max_y - min_y
+        size_z = max_z - min_z
+        
+        max_size = np.max([size_x, size_y, size_z])
+        max_size = np.max([size_x, size_y, size_z]) / 2
+        cx = size_x / 2 + min_x
+        cy = size_y / 2 + min_y
+        cz = size_z / 2 + min_z
+        extent = int(self.shape[0] / 2)
+
+        for i in range(0,num_points,3):
+            x = pointcloud[i+0]
+            y = pointcloud[i+1]
+            z = pointcloud[i+2]
+            idx_x = int(((x - cx) * extent / max_size + extent) * (self.shape[0] - 1) / (extent * 2))
+            idx_y = int(((y - cy) * extent / max_size + extent) * (self.shape[0] - 1) / (extent * 2))
+            idx_z = int(((z - cz) * extent / max_size + extent) * (self.shape[0] - 1) / (extent * 2))
+            # idx_x = int(((x - cx) * extent / size_x * 2.0 + extent) * (self.shape[0] - 1) / (extent * 2))
+            # idx_y = int(((y - cy) * extent / size_y * 2.0 + extent) * (self.shape[0] - 1) / (extent * 2))
+            # idx_z = int(((z - cz) * extent / size_z * 2.0 + extent) * (self.shape[0] - 1) / (extent * 2))
+            segmentation_res_pts.append(segmentation_res[idx_x,idx_y,idx_z])
+
+        segmentation_res_pts = np.array(segmentation_res_pts)
+        parts[Parts.IOU_PREDICTION].append(segmentation_res_pts)
+        
+
+    def save_segmentation(self, segmentation_gt_pts, segmentation_res, name, points, data_dict, in_memory=True):
+        if in_memory:
+            return self.save_segmentation_mem(segmentation_gt_pts, segmentation_res, name, points, data_dict)
+        else:
+            return self.save_segmentation_disc(segmentation_gt_pts, segmentation_res, name, points, data_dict)
+
+
+    def evaluate_iou_results(self, data_dict, in_memory=True):
+        if in_memory:
+            return self.evaluate_iou_results_mem(data_dict)
+        else:
+            return self.evaluate_iou_results_disc(data_dict)
+
+
+    def evaluate_iou_results_mem(self, data_dict):
+        ncategory = self.num_classes
+        nmodels = np.zeros(ncategory)
+        iou_all = np.zeros(ncategory)
+        eps = 0.0000001
+        for i in range(0, ncategory):
+            parts = Parts.Labels[Parts.Labels[str(i)]]
+            l = len(parts[Parts.IOU_GROUND_TRUTH])
+            nmodels[i] = l
+            nparts = parts[self.PART_COUNT]
+            iou_per_part = np.zeros((l,nparts))
+            for k in range(0,l):
+                for j in range(parts[self.PART_START],parts[self.PART_START]+nparts):
+                    union = np.sum(np.logical_or(parts[Parts.IOU_PREDICTION][k]==j,parts[Parts.IOU_GROUND_TRUTH][k]==j))
+                    if union < eps:
+                        iou_per_part[k,j-parts[self.PART_START]] = 1.0
+                    else:
+                        iou_per_part[k,j-parts[self.PART_START]] = np.sum(np.logical_and(parts[Parts.IOU_PREDICTION][k]==j,parts[Parts.IOU_GROUND_TRUTH][k]==j))/union
+
+            iou_all[i] = np.mean(iou_per_part)
+            print("\rCategory %s has %d parts and IoU %f" % (Parts.Labels[str(i)],nparts,iou_all[i]))
+
+
+        iou_weighted_ave = np.sum(np.multiply(iou_all,nmodels))/np.sum(nmodels)
+
+        print("Weighted average IOU is %f" % iou_weighted_ave)
+
+        return iou_weighted_ave,iou_all
+
+    
+    def evaluate_iou_results_disc(self, data_dict):
         print("Evaluating " + data_dict["name"])
         path = os.path.join(self.dataset_path, "segmentation")
 
@@ -352,7 +448,6 @@ class Parts(dataset_template):
         return iou_weighted_ave,iou_all
 
 
-
-if __name__ == "__main__":
-    dataset = Parts("./3d-object-recognition/UnityData", load=False)
-    dataset.evaluate_iou_results(dataset.train)
+# if __name__ == "__main__":
+#     dataset = Parts("./3d-object-recognition/UnityData", load=False)
+#     dataset.evaluate_iou_results(dataset.train)
