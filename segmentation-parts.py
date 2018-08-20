@@ -36,7 +36,7 @@ class PartsNet():
     def forward_propagation2(self, X, n_cat, n_seg, keep_prob, bn_training):
         self.layer_idx = 0
 
-        A0 = self.convolution(X*2-1, [5,5,5,1,32], padding="SAME") 
+        A0 = self.convolution(X, [5,5,5,1,32], padding="SAME") 
         D0 = tf.nn.dropout(A0, keep_prob)
         D0 = tf.layers.batch_normalization(D0, training=bn_training)
         A1 = self.convolution(D0, [5,5,5,32,32], padding="SAME")
@@ -163,7 +163,8 @@ class PartsNet():
         D1 = tf.layers.batch_normalization(D1, training=bn_training)        
 
         M1 = tf.nn.max_pool3d(D1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8
-        A2 = self.convolution(M1, [3,3,3,64,128], padding="VALID") # to 6
+        A2_1 = self.convolution(M1, [3,3,3,64,128], padding="SAME") # to 8
+        A2 = self.convolution(A2_1, [3,3,3,128,128], padding="VALID") # to 6
         D2 = tf.nn.dropout(A2, keep_prob)
         D2 = tf.layers.batch_normalization(D2, training=bn_training)        
         
@@ -175,24 +176,26 @@ class PartsNet():
         A_class = tf.argmax(tf.nn.softmax(A_fv), axis=-1)
         print(A_class.shape)
 
-        U0 = self.convolution(A4, [1,1,1,512,256], padding="VALID") #1x1x1x256
+        # U0 = self.convolution(A4, [1,1,1,512,256], padding="VALID") #1x1x1x256
 
-        U_t = tf.tile(U0, [1,8,8,8,1])
-        U_concat = tf.concat([M1, U_t], axis=-1)
-        U1 = self.convolution(U_concat, [3,3,3,320,256], padding="SAME")
+        U_t = tf.tile(A4, [1,8,8,8,1])
+        U_concat = tf.concat([A2_1, U_t], axis=-1)
+        U1 = self.convolution(U_concat, [3,3,3,640,512], padding="SAME")
         U1 = tf.layers.batch_normalization(U1, training=bn_training)        
-        U1 = self.convolution(U1, [3,3,3,256,256], padding="SAME")
+        U1 = self.convolution(U1, [3,3,3,512,256], padding="SAME")
         U1 = tf.layers.batch_normalization(U1, training=bn_training)        
         
         U2 = tf.keras.layers.UpSampling3D([2,2,2])(U1) # to 16
-        U_concat1 = tf.concat([M0, U2], axis=-1)
-        U2 = self.convolution(U_concat1, [3,3,3,288,128], padding="SAME")
+        U_concat1 = tf.concat([D1, U2], axis=-1)
+        U2 = self.convolution(U_concat1, [3,3,3,320,256], padding="SAME")
         U2 = tf.layers.batch_normalization(U2, training=bn_training)        
-        U2 = self.convolution(U2, [3,3,3,128,128], padding="SAME")
+        U2 = self.convolution(U2, [3,3,3,256,128], padding="SAME")
         U2 = tf.layers.batch_normalization(U2, training=bn_training)        
 
         U3 = tf.keras.layers.UpSampling3D([2,2,2])(U2) # to 32
-        U_mask = self.convolution(U3, [3,3,3,128,128], padding="SAME")
+        U_concat2 = tf.concat([D0, U3], axis=-1)
+        U_mask = self.convolution(U_concat2, [3,3,3,160,128], padding="SAME")
+        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)        
         U_mask = self.convolution(U_mask, [1,1,1,128,128], padding="SAME")
         U_mask = self.convolution(U_mask, [1,1,1,128,n_seg], padding="SAME", act=None)
         U_class = tf.argmax(tf.nn.softmax(U_mask), axis=-1)
@@ -233,7 +236,15 @@ class PartsNet():
         # seg_weights = np.array(seg_weights)
         # U = tf.convert_to_tensor(seg_weights, dtype=tf.float32) * U
 
-        weighted_entropy_seg = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=Y_seg, logits=U) #* Xrep
+        # one_hot_labels = tf.one_hot(Y_seg, n_seg)
+        # print(one_hot_labels)
+        # S = tf.get_variable("sum_filter", [3,3,3,50,50], initializer=tf.constant_initializer(1), dtype=tf.float32, trainable=False)
+        # weights = tf.nn.conv3d(one_hot_labels, S, [1,1,1,1,1], padding="SAME") * one_hot_labels
+        # print(weights)
+        # weights = tf.reduce_max(weights, axis=-1)
+        # print(weights)
+        # weighted_entropy_seg = weights * tf.nn.sparse_softmax_cross_entropy_with_logits(labels=Y_seg, logits=U) #* Xrep
+        weighted_entropy_seg = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=Y_seg, logits=U)
         # weighted_entropy_seg = tf.losses.sparse_softmax_cross_entropy(Y_seg, U) #* Xrep
         # weighted_entropy_seg = weights * tf.losses.sparse_softmax_cross_entropy(Y_seg, U) #* Xrep
         # l2loss = tf.nn.l2_loss(predictions - one_hot_labels)
@@ -253,18 +264,20 @@ class PartsNet():
         print(n_cat)
         print(n_seg)
         X, Y_seg, Y_cat, keep_prob, bn_training, weight = self.create_placeholders(n_cat)
-        A_fv, A_class, U_mask, U_class = self.forward_propagation(X, n_cat, n_seg, keep_prob, True)
+        A_fv, A_class, U_mask, U_class = self.forward_propagation(X, n_cat, n_seg, keep_prob, bn_training)
         cost, tmp_test = self.compute_cost(U_mask, Y_seg, X, A_fv, Y_cat, n_seg, weight)
 
         # fv part
         step = tf.Variable(0, trainable=False, name="global_step")
         lr_dec = tf.train.exponential_decay(self.lr, step, self.decay_step, self.decay_rate, staircase=True)
         optimizer = tf.train.AdamOptimizer(learning_rate=lr_dec)
-        gvs = optimizer.compute_gradients(cost)
-        # print(gvs)
-        capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
-        train_op = optimizer.apply_gradients(capped_gvs)
-        # train_op = optimizer.minimize(cost)
+        extra_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(extra_ops):
+            gvs = optimizer.compute_gradients(cost)
+            # print(gvs)
+            capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
+            train_op = optimizer.apply_gradients(capped_gvs)
+            # train_op = optimizer.minimize(cost)
 
         init = tf.global_variables_initializer()
         writer = tf.summary.FileWriter(log_dir, graph=tf.get_default_graph())
@@ -304,11 +317,12 @@ class PartsNet():
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         with tf.Session(config=config) as sess:
-            sess.run(init)
 
             if load:
                 tf.train.Saver().restore(sess, os.path.join(log_dir, self.name + ".ckpt"))
                 print("Model loaded from file: %s" % os.path.join(log_dir, self.name + ".ckpt"))
+            else:
+                sess.run(init)
 
             if train:
                 costs = []
@@ -369,13 +383,10 @@ class PartsNet():
             #     print("Evaluate on train dataset")
             #     accuracy_test(self.dataset, self.dataset.train)
             #     self.evaluate_iou_results(self.dataset.train)
-
+            
             print("Evaluate on dev dataset")
             accuracy_test(self.dataset, self.dataset.dev)
             self.evaluate_iou_results(self.dataset.dev)
-            # print("Evaluate on test dataset")
-            # accuracy_test(self.dataset, self.dataset.test)
-            # self.evaluate_iou_results(self.dataset.test)
 
             # acc_train = accuracy_test(self.dataset, self.dataset.train)
             # acc_test = accuracy_test(self.dataset, self.dataset.test)
@@ -411,4 +422,4 @@ class PartsNet():
 if __name__ == "__main__":
     # s = PartsNet("ShapeNet", "./3d-object-recognition/UnityData")
     s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData")
-    s.run_model(load=False, train=True,visualize=False)
+    s.run_model(load=True, train=True,visualize=False)

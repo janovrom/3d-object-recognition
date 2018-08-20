@@ -286,6 +286,7 @@ class Parts(dataset_template):
 
 
     def evaluate_iou_results(self, data_dict):
+        print("Evaluating " + data_dict["name"])
         path = os.path.join(self.dataset_path, "segmentation")
 
         path_gt = os.path.join(path, "gt", data_dict["name"])
