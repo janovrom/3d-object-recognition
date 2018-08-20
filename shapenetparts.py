@@ -283,6 +283,7 @@ class Parts(dataset_template):
 
 
     def evaluate_iou_results(self, data_dict):
+        print("Evaluating " + data_dict["name"])
         path = ".\\3d-object-recognition\\ShapePartsData\\segmentation"
 
         path_gt = os.path.join(path, "gt", data_dict["name"])
