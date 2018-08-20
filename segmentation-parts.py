@@ -23,7 +23,7 @@ class PartsNet():
 
     
     def convolution(self, X, shape, strides=[1,1,1,1,1], padding="SAME", act=tf.nn.relu):
-        W = tf.get_variable("weights" + str(self.layer_idx), shape, initializer=tf.contrib.layers.xavier_initializer(), dtype=tf.float32)
+        W = tf.get_variable("weights" + str(self.layer_idx), shape, initializer=tf.contrib.layers.xavier_initializer(uniform=False), dtype=tf.float32)
         b = tf.get_variable("biases" + str(self.layer_idx), shape[-1], initializer=tf.zeros_initializer(), dtype=tf.float32)
         Z = tf.nn.conv3d(X, W, strides=strides, padding=padding) + b
         if act != None:
@@ -101,7 +101,59 @@ class PartsNet():
         # imagine that the net operates over 32x32x32 blocks
         # feature vector learning
         # IN 32
-        A0 = self.convolution(X*2-1, [5,5,5,1,32], padding="SAME") 
+        A0 = self.convolution(X, [5,5,5,1,32], padding="SAME") 
+        D0 = tf.nn.dropout(A0, keep_prob)
+        D0 = tf.layers.batch_normalization(D0, training=bn_training)        
+
+        M0 = tf.nn.max_pool3d(D0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 16
+        A1 = self.convolution(M0, [5,5,5,32,64], padding="SAME")
+        D1 = tf.nn.dropout(A1, keep_prob)        
+        D1 = tf.layers.batch_normalization(D1, training=bn_training)        
+
+        M1 = tf.nn.max_pool3d(D1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8
+        A2 = self.convolution(M1, [3,3,3,64,128], padding="VALID") # to 6
+        D2 = tf.nn.dropout(A2, keep_prob)
+        D2 = tf.layers.batch_normalization(D2, training=bn_training)        
+        
+        M2 = tf.nn.max_pool3d(D2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 3
+        A3 = self.convolution(M2, [3,3,3,128,256], padding="VALID") #1x1x1x256
+        A4 = self.convolution(A3, [1,1,1,256,512], padding="VALID") #1x1x1x256
+        A5 = self.convolution(A4, [1,1,1,512,256], padding="VALID")
+        A_fv = tf.reshape(self.convolution(A5, [1,1,1,256,n_cat], padding="VALID", act=None), [-1, n_cat])
+        A_class = tf.argmax(tf.nn.softmax(A_fv), axis=-1)
+        print(A_class.shape)
+
+        U0 = self.convolution(A4, [1,1,1,512,256], padding="VALID") #1x1x1x256
+
+        U_t = tf.tile(U0, [1,8,8,8,1])
+        U_concat = tf.concat([M1, U_t], axis=-1)
+        U1 = self.convolution(U_concat, [3,3,3,320,256], padding="SAME")
+        U1 = tf.layers.batch_normalization(U1, training=bn_training)        
+        U1 = self.convolution(U1, [3,3,3,256,256], padding="SAME")
+        U1 = tf.layers.batch_normalization(U1, training=bn_training)        
+        
+        U2 = tf.keras.layers.UpSampling3D([2,2,2])(U1) # to 16
+        U_concat1 = tf.concat([M0, U2], axis=-1)
+        U2 = self.convolution(U_concat1, [3,3,3,288,128], padding="SAME")
+        U2 = tf.layers.batch_normalization(U2, training=bn_training)        
+        U2 = self.convolution(U2, [3,3,3,128,128], padding="SAME")
+        U2 = tf.layers.batch_normalization(U2, training=bn_training)        
+
+        U3 = tf.keras.layers.UpSampling3D([2,2,2])(U2) # to 32
+        U_mask = self.convolution(U3, [3,3,3,128,128], padding="SAME")
+        U_mask = self.convolution(U_mask, [1,1,1,128,128], padding="SAME")
+        U_mask = self.convolution(U_mask, [1,1,1,128,n_seg], padding="SAME", act=None)
+        U_class = tf.argmax(tf.nn.softmax(U_mask), axis=-1)
+
+        return A_fv, A_class, U_mask, U_class
+
+
+    def forward_propagation_bckp(self, X, n_cat, n_seg, keep_prob, bn_training):
+        self.layer_idx = 0
+        # imagine that the net operates over 32x32x32 blocks
+        # feature vector learning
+        # IN 32
+        A0 = self.convolution(X, [5,5,5,1,32], padding="SAME") 
         D0 = tf.nn.dropout(A0, keep_prob)
         D0 = tf.layers.batch_normalization(D0, training=bn_training)        
 
@@ -197,16 +249,16 @@ class PartsNet():
         log_dir = os.path.join("./3d-object-recognition", self.name)
         tf.reset_default_graph()
         n_cat = self.dataset.num_classes
-        n_seg = 50#self.dataset.num_classes_parts
+        n_seg = self.dataset.num_classes_parts
         print(n_cat)
         print(n_seg)
         X, Y_seg, Y_cat, keep_prob, bn_training, weight = self.create_placeholders(n_cat)
-        A_fv, A_class, U_mask, U_class = self.forward_propagation(X, n_cat, n_seg, keep_prob, train)
+        A_fv, A_class, U_mask, U_class = self.forward_propagation(X, n_cat, n_seg, keep_prob, True)
         cost, tmp_test = self.compute_cost(U_mask, Y_seg, X, A_fv, Y_cat, n_seg, weight)
 
         # fv part
         step = tf.Variable(0, trainable=False, name="global_step")
-        lr_dec = tf.train.exponential_decay(self.lr, step, self.decay_step, self.decay_rate)
+        lr_dec = tf.train.exponential_decay(self.lr, step, self.decay_step, self.decay_rate, staircase=True)
         optimizer = tf.train.AdamOptimizer(learning_rate=lr_dec)
         gvs = optimizer.compute_gradients(cost)
         # print(gvs)
@@ -235,13 +287,15 @@ class PartsNet():
                 # print("Average interference time per mini batch example %f sec" % ((time.time() - stime) / occ.shape[0]))
                 acc = acc + a
                 acc_cat = acc_cat + np.sum(cat == predicted_category) / predicted_category.shape[0]
+
                 for j in range(0, deconvolved_images.shape[0]):
                     dataset.save_segmentation(lbs[j], deconvolved_images[j], names[j], points[j], data_dict)
-
+ 
                 if visualize:
                     for j in range(0, deconvolved_images.shape[0]):
                         print(names[j])
                         dataset.vizualise_batch(seg[j],deconvolved_images[j],cat[j],predicted_category[j],xresh[j],names[j])
+
 
             print("Deconvolution average accuracy %f" % (acc / dataset.num_mini_batches(data_dict)))
             print("Deconvolution average category accuracy %f" % (acc_cat / dataset.num_mini_batches(data_dict)))
@@ -304,15 +358,24 @@ class PartsNet():
 
                     # plt.figure(4)
                     plt.clf()
-                    plt.barh(np.arange(n_cat),per_category_iou, tick_label=["airplane", "bag", "cap", "car", "chair", "earphone", "guitar", "knife", "lamp", "laptop", "motorbike", "mug", "pistol", "rocket", "skateboard", "table"])
+                    plt.barh(np.arange(n_cat),per_category_iou, tick_label=list(Parts.label_dict.keys()))
+                    # plt.barh(np.arange(n_cat),per_category_iou, tick_label=["airplane", "bag", "cap", "car", "chair", "earphone", "guitar", "knife", "lamp", "laptop", "motorbike", "mug", "pistol", "rocket", "skateboard", "table"])
                     plt.savefig("./3d-object-recognition/ShapeNet/per_category_iou" + str(epoch+1) + ".png", format="png")
 
                     # do check for file barrier, if so, break training cycle
                     if os.path.exists(os.path.join(log_dir, "barrier.txt")):
                         break
-            else:
-                accuracy_test(self.dataset, self.dataset.dev)
-                self.evaluate_iou_results(self.dataset.dev)
+            # else:
+            #     print("Evaluate on train dataset")
+            #     accuracy_test(self.dataset, self.dataset.train)
+            #     self.evaluate_iou_results(self.dataset.train)
+
+            print("Evaluate on dev dataset")
+            accuracy_test(self.dataset, self.dataset.dev)
+            self.evaluate_iou_results(self.dataset.dev)
+            # print("Evaluate on test dataset")
+            # accuracy_test(self.dataset, self.dataset.test)
+            # self.evaluate_iou_results(self.dataset.test)
 
             # acc_train = accuracy_test(self.dataset, self.dataset.train)
             # acc_test = accuracy_test(self.dataset, self.dataset.test)
@@ -346,6 +409,6 @@ class PartsNet():
 
 
 if __name__ == "__main__":
+    # s = PartsNet("ShapeNet", "./3d-object-recognition/UnityData")
     s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData")
     s.run_model(load=False, train=True,visualize=False)
-    # s.evaluate_iou_results()

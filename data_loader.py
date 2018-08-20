@@ -821,7 +821,6 @@ def load_binvox_np(pointcloud, labels, grid_size=32, visualize=False):
 def load_binvox(pts, sgs, grid_size=32, label_start=0, visualize=False):
     points = []
     labels = []
-
     with open(pts, "r") as pts_f, open(sgs, "rb") as sgs_f:
         lines = pts_f.readlines()
 
@@ -852,6 +851,7 @@ def load_binvox(pts, sgs, grid_size=32, label_start=0, visualize=False):
     size_z = max_z - min_z
     
     max_size = np.max([size_x, size_y, size_z])
+    min_size = min(min_x, min(min_y, min_z))
     # print("%s has size=(%f, %f, %f) meters\n" % (os.path.basename(filename), size_x, size_y, size_z))
     occupancy_grid = np.array(np.zeros((grid_size,grid_size,grid_size)), dtype=np.float32)
     label_grid = np.array(np.zeros((grid_size,grid_size,grid_size)), dtype=np.int32)
@@ -876,7 +876,6 @@ def load_binvox(pts, sgs, grid_size=32, label_start=0, visualize=False):
         pz.append(0)
         pv.append(0)
         pv.append(8)
-
 
     for i in range(0,num_points,3):
         x = pointcloud[i+0]
@@ -932,17 +931,23 @@ def load_binvox(pts, sgs, grid_size=32, label_start=0, visualize=False):
     # viz
     if visualize:
         fig = plt.figure()
-        fig2 = plt.figure()
         # plt.axis("scaled")
-        ax2 = fig2.add_subplot(111, projection='3d')
         ax = fig.add_subplot(111, projection='3d')
         m = plt.get_cmap("Set1")
         # plt.gca().set_aspect('scaled', adjustable='box')
         pv = np.array(pv)
-        ax.scatter(px, py, pz, c=pv, cmap=m, marker='p')
         ax.set_xlabel('X Label')
         ax.set_ylabel('Y Label')
         ax.set_zlabel('Z Label')
+        plt.axis('off')
+        plt.gca().set_aspect('equal', adjustable='box')
+        ax.set_xlim(min_size,max_size)
+        ax.set_ylim(min_size,max_size)
+        ax.set_zlim(min_size,max_size)
+        ax.scatter(px, py, pz, c=pv, cmap=m, marker='p')
+
+        fig2 = plt.figure()
+        ax2 = fig2.add_subplot(111, projection='3d')
         ax2.scatter(xs, ys, zs, c=vs, cmap=m, marker='p')
         ax2.set_xlim(0,grid_size-1)
         ax2.set_ylim(0,grid_size-1)
@@ -955,8 +960,252 @@ def load_binvox(pts, sgs, grid_size=32, label_start=0, visualize=False):
     return occupancy_grid, label_grid, label_count, pointcloud, labels
 
 
+def viz_points_segmentation(pts_path, gt_path, res_path):
+    with open(gt_path, "rb") as f:
+        gt = np.load(f)
+    with open(res_path, "rb") as f:
+        res = np.load(f)
+
+    points = []
+
+    with open(pts_path, "r") as pts_f:
+        lines = pts_f.readlines()
+
+        for line in lines:
+            splitted = line.split(" ")
+            points.append(float(splitted[0]))
+            points.append(float(splitted[1]))
+            points.append(float(splitted[2]))
+
+
+    pointcloud = np.array(points)
+    num_points = int(pointcloud.shape[0])
+
+    # Find point cloud min and max
+    min_x = np.min(pointcloud[0::3])
+    min_y = np.min(pointcloud[1::3])
+    min_z = np.min(pointcloud[2::3])
+    max_x = np.max(pointcloud[0::3])
+    max_y = np.max(pointcloud[1::3])
+    max_z = np.max(pointcloud[2::3])
+
+    maximum = max(max_x, max(max_y, max_z))
+    minimum = min(min_x, min(min_y, min_z))
+
+    xs = []
+    ys = []
+    zs = []
+    vs = []
+
+    for i in range(0,num_points,3):
+        x = pointcloud[i+0]
+        y = pointcloud[i+1]
+        z = pointcloud[i+2]
+
+
+        idx = int(i/3)
+        xs.append(x)
+        ys.append(y)
+        zs.append(z)
+        if gt[idx] == res[idx]:
+            vs.append((0,1,0))
+        else:
+            vs.append((1,0,0))
+        
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(xs, ys, zs, c=vs, marker='p')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    plt.axis('off')
+    plt.gca().set_aspect('equal', adjustable='box')
+    ax.set_xlim(minimum,maximum)
+    ax.set_ylim(minimum,maximum)
+    ax.set_zlim(minimum,maximum)
+    plt.show()
+
+
+def xyzl_to_binvox(filename, out_dir, data_name, category_name):
+    points = []
+    labels = []
+    name = os.path.basename(filename).split(".")[0]
+    with open(filename, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            splitted = line.split(" ")
+            points.append(float(splitted[0]))
+            points.append(float(splitted[1]))
+            points.append(float(splitted[2]))
+            label = int(np.round(math.log2(float(splitted[3]))))
+            labels.append(label_conversion[label]+1)
+
+    data_dir = os.path.join(out_dir, data_name, data_name + "_data", category_name)
+    if not os.path.exists(data_dir):
+        os.mkdir(data_dir)
+        os.chmod(data_dir, 0o777)
+
+    label_dir = os.path.join(out_dir, data_name, data_name + "_label", category_name)
+    if not os.path.exists(label_dir):
+        os.mkdir(label_dir)
+        os.chmod(label_dir, 0o777)
+    
+    pointcloud = np.array(points)
+    num_points = int(pointcloud.shape[0])
+    # Find point cloud min and max
+    min_x = np.min(pointcloud[0::3])
+    min_y = np.min(pointcloud[1::3])
+    min_z = np.min(pointcloud[2::3])
+    max_x = np.max(pointcloud[0::3])
+    max_y = np.max(pointcloud[1::3])
+    max_z = np.max(pointcloud[2::3])
+
+    size_x = max_x - min_x
+    size_y = max_y - min_y
+    size_z = max_z - min_z
+    cx = size_x / 2 + min_x
+    cy = size_y / 2 + min_y
+    cz = size_z / 2 + min_z
+
+    with open(os.path.join(data_dir, name + ".pts"), "w") as f, open(os.path.join(label_dir, name + ".seg"), "wb") as s:
+        string = ""
+        seg_string = ""
+        for i in range(0, len(points), 3):
+            x = points[i+0] - cx
+            y = points[i+1] - cy
+            z = points[i+2] - cz
+            if i + 3 < len(points):
+                string = string + "%f %f %f\n" % (x, y, z)
+            else:
+                string = string + "%f %f %f" % (x, y, z)
+
+            seg_string += "%d\n" % labels[int(i/3)]
+
+        f.write(string)
+        s.write(seg_string.encode('utf-8'))
+                
+
+def viz_points(pts_path, seg_path, out_dir=None):
+    points = []
+    
+    with open(seg_path, "rb") as f:
+        labels = np.load(f)
+
+    with open(pts_path, "r") as pts_f:
+        lines = pts_f.readlines()
+
+        for line in lines:
+            splitted = line.split(" ")
+            points.append(float(splitted[0]))
+            points.append(float(splitted[1]))
+            points.append(float(splitted[2]))
+
+
+    pointcloud = np.array(points)
+    num_points = int(pointcloud.shape[0])
+
+    # Find point cloud min and max
+    min_x = np.min(pointcloud[0::3])
+    min_y = np.min(pointcloud[1::3])
+    min_z = np.min(pointcloud[2::3])
+    max_x = np.max(pointcloud[0::3])
+    max_y = np.max(pointcloud[1::3])
+    max_z = np.max(pointcloud[2::3])
+
+    maximum = max(max_x, max(max_y, max_z))
+    minimum = min(min_x, min(min_y, min_z))
+
+    xs = []
+    ys = []
+    zs = []
+    vs = []
+    # red, green, blue, orange, yellow, purple
+    # bg , chair, table,couch , couch-table
+    color = [(1,0,0), (0,1,0), (0,0,1), (1,0.5,0), (1,1,0), (1,0,1)]
+    string = ""
+    for i in range(0,num_points,24):
+        x = pointcloud[i+0]
+        y = pointcloud[i+1]
+        z = pointcloud[i+2]
+        xs.append(x)
+        ys.append(y)
+        zs.append(z)
+        idx = labels[int(i/3)]
+        c = color[idx]
+        vs.append(c)
+
+        string += "%f %f %f %f %f %f\n" % (x, y, z, c[0], c[1], c[2])
+    if not out_dir == None:    
+        with open(os.path.join(out_dir, pts_path.split(os.sep)[-1]), "w") as f:
+            f.write(string)
+
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(xs, ys, zs, c=vs, marker='p')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    plt.axis('off')
+    plt.gca().set_aspect('equal', adjustable='box')
+    ax.set_xlim(minimum,maximum)
+    ax.set_ylim(minimum,maximum)
+    ax.set_zlim(minimum,maximum)
+    plt.show()
+
+
+def filter_binvox(pts_path, seg_path, min_dist=0.1, max_dist=3.0):
+    point_str = ""
+    seg_str = ""
+
+    with open(pts_path, "r") as pts_f, open(seg_path, "rb") as sgs_f:
+        lines = pts_f.readlines()
+        iteration = 1
+        for line in lines:
+            splitted = line.split(" ")
+            l = int(sgs_f.read(1))
+            sgs_f.read(1) # throw out newline
+            x = float(splitted[0])
+            y = float(splitted[1])
+            z = float(splitted[2])
+            d = np.sqrt(x*x + y*y + z*z)
+            if d >= min_dist and d <= max_dist:
+                if iteration == len(lines):
+                    point_str += "%f %f %f" % (x,y,z)
+                else:
+                    point_str += "%f %f %f\n" % (x,y,z)
+
+                seg_str += "%d\n" % l
+            
+            iteration += 1
+
+    with open(pts_path, "w") as pts_f, open(seg_path, "wb") as sgs_f:
+        pts_f.truncate()
+        pts_f.write(point_str)
+        sgs_f.truncate()
+        sgs_f.write(seg_str.encode('utf-8'))
+
+
+
 if __name__ == "__main__":
-    path_pt = ".\\3d-object-recognition\\ShapePartsData\\train\\train_data\\cap"
-    path_sg = ".\\3d-object-recognition\\ShapePartsData\\train\\train_label\\cap"
-    for pts,seg in zip(os.listdir(path_pt), os.listdir(path_sg)):
-        load_binvox(os.path.join(path_pt,pts), os.path.join(path_sg,seg), grid_size=32, label_start=0, visualize=True)
+#     # pts_path = "./tmp/012938.pts"
+#     # gt_path =  "./tmp/012938.gt"
+#     # res_path = "./tmp/012938.res"
+#     # viz_points_segmentation(pts_path, gt_path, res_path)
+#     # path_pt =  ".\\3d-object-recognition\\ShapePartsData\\dev\\dev_data\\motorbike\\012448.pts"
+#     # path_sg = ".\\3d-object-recognition\\ShapePartsData\\dev\\dev_label\\motorbike\\012448.seg"
+#     # load_binvox(path_pt, path_sg, grid_size=32, label_start=0, visualize=True)
+    # for pts,seg in zip(os.listdir("./tmp/pts/"), os.listdir("./tmp/res/")):
+    #     viz_points("./tmp/pts\\" + pts, "./tmp/res\\" + seg)#, out_dir="./tmp")
+    
+    path_pts = "./3d-object-recognition/UnityData/test/test_data/room"
+    path_seg = "./3d-object-recognition/UnityData/segmentation/res/test/room"
+    for pts,seg in zip(os.listdir(path_pts),os.listdir(path_seg)):
+        viz_points(os.path.join(path_pts, pts), os.path.join(path_seg, seg))
+
+    # for xyzl_fname in os.listdir("./3d-object-recognition/UnityData/src-train"):
+    #     xyzl_to_binvox(os.path.join("./3d-object-recognition/UnityData/src-train", xyzl_fname), "./3d-object-recognition/UnityData/", "train", "room")
+    #     path_pt =  "./3d-object-recognition/UnityData/train/train_data/room/" + xyzl_fname.split(".")[0] + ".pts"
+    #     path_sg =  "./3d-object-recognition/UnityData/train/train_label/room/" + xyzl_fname.split(".")[0] + ".seg"
+    #     # load_binvox(path_pt, path_sg, grid_size=32, label_start=0, visualize=True)

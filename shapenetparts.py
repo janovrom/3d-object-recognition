@@ -6,25 +6,27 @@ import data_loader as dl
 
 class Parts(dataset_template):
     
-
     label_dict = {
-        "airplane"      : 0,
-        "bag"           : 1,
-        "cap"           : 2,
-        "car"           : 3,
-        "chair"         : 4,
-        "earphone"      : 5,
-        "guitar"        : 6,
-        "knife"         : 7,
-        "lamp"          : 8 ,
-        "laptop"        : 9,
-        "motorbike"     : 10,
-        "mug"           : 11,
-        "pistol"        : 12,
-        "rocket"        : 13,
-        "skateboard"    : 14,
-        "table"         : 15
+        "room" : 0
     }
+    # label_dict = {
+    #     "airplane"      : 0,
+    #     "bag"           : 1,
+    #     "cap"           : 2,
+    #     "car"           : 3,
+    #     "chair"         : 4,
+    #     "earphone"      : 5,
+    #     "guitar"        : 6,
+    #     "knife"         : 7,
+    #     "lamp"          : 8 ,
+    #     "laptop"        : 9,
+    #     "motorbike"     : 10,
+    #     "mug"           : 11,
+    #     "pistol"        : 12,
+    #     "rocket"        : 13,
+    #     "skateboard"    : 14,
+    #     "table"         : 15
+    # }
     
     ORDER = "order"
     CATEGORY_NAME = "name"
@@ -99,6 +101,7 @@ class Parts(dataset_template):
         self.dev = { "name": "dev" }
         # initialize datasets
         stime = time.time()
+        self.dataset_path = datapath
         self.__load_dataset(os.path.join(datapath, "train"), self.train, load)
         self.__load_dataset(os.path.join(datapath, "test"), self.test, load)
         self.__load_dataset(os.path.join(datapath, "dev"), self.dev, load)
@@ -216,7 +219,7 @@ class Parts(dataset_template):
 
 
     def clear_segmentation(self, data_dict):
-        paths = [os.path.join(".\\3d-object-recognition\\ShapePartsData\\segmentation\\gt", data_dict["name"]), os.path.join(".\\3d-object-recognition\\ShapePartsData\\segmentation\\res", data_dict["name"])]
+        paths = [os.path.join(self.dataset_path, "segmentation/gt", data_dict["name"]), os.path.join(self.dataset_path, "segmentation/res", data_dict["name"])]
         for path in paths:
             for directory in os.listdir(path):
                 directory = os.path.join(path,directory)
@@ -230,8 +233,8 @@ class Parts(dataset_template):
         fname = name_split[1].split(".")[0]
         segmentation_gt_pts = segmentation_gt_pts
         segmentation_res = segmentation_res
-        path_gt = os.path.join(".\\3d-object-recognition\\ShapePartsData\\segmentation\\gt", data_dict["name"], cat_dir)
-        path_res = os.path.join(".\\3d-object-recognition\\ShapePartsData\\segmentation\\res", data_dict["name"], cat_dir)
+        path_gt = os.path.join(self.dataset_path, "segmentation/gt", data_dict["name"], cat_dir)
+        path_res = os.path.join(self.dataset_path, "segmentation/res", data_dict["name"], cat_dir)
         if not os.path.exists(path_gt):
             os.mkdir(path_gt)
             os.chmod(path_gt, 0o777)
@@ -283,7 +286,7 @@ class Parts(dataset_template):
 
 
     def evaluate_iou_results(self, data_dict):
-        path = ".\\3d-object-recognition\\ShapePartsData\\segmentation"
+        path = os.path.join(self.dataset_path, "segmentation")
 
         path_gt = os.path.join(path, "gt", data_dict["name"])
         path_res = os.path.join(path, "res", data_dict["name"])
@@ -350,5 +353,5 @@ class Parts(dataset_template):
 
 
 if __name__ == "__main__":
-    dataset = Parts("./3d-object-recognition/ShapePartsData", load=False)
+    dataset = Parts("./3d-object-recognition/UnityData", load=False)
     dataset.evaluate_iou_results(dataset.train)
