@@ -6,27 +6,27 @@ import data_loader as dl
 
 class Parts(dataset_template):
     
-    label_dict = {
-        "room" : 0
-    }
     # label_dict = {
-    #     "airplane"      : 0,
-    #     "bag"           : 1,
-    #     "cap"           : 2,
-    #     "car"           : 3,
-    #     "chair"         : 4,
-    #     "earphone"      : 5,
-    #     "guitar"        : 6,
-    #     "knife"         : 7,
-    #     "lamp"          : 8 ,
-    #     "laptop"        : 9,
-    #     "motorbike"     : 10,
-    #     "mug"           : 11,
-    #     "pistol"        : 12,
-    #     "rocket"        : 13,
-    #     "skateboard"    : 14,
-    #     "table"         : 15
+    #     "room" : 0
     # }
+    label_dict = {
+        "airplane"      : 0,
+        "bag"           : 1,
+        "cap"           : 2,
+        "car"           : 3,
+        "chair"         : 4,
+        "earphone"      : 5,
+        "guitar"        : 6,
+        "knife"         : 7,
+        "lamp"          : 8 ,
+        "laptop"        : 9,
+        "motorbike"     : 10,
+        "mug"           : 11,
+        "pistol"        : 12,
+        "rocket"        : 13,
+        "skateboard"    : 14,
+        "table"         : 15
+    }
     
     ORDER = "order"
     CATEGORY_NAME = "name"
@@ -352,6 +352,7 @@ class Parts(dataset_template):
 
 
     def evaluate_iou_results_mem(self, data_dict):
+        print("Evaluating " + data_dict["name"])
         ncategory = self.num_classes
         nmodels = np.zeros(ncategory)
         iou_all = np.zeros(ncategory)
