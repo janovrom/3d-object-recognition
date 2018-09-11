@@ -1,1 +1,1 @@
-tensorboard --logdir=D:\janovrom\Python\3d-object-recognition\ShapeNet --port=6006
+tensorboard --logdir=.\3d-object-recognition\ShapeNet
