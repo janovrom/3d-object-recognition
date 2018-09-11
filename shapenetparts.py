@@ -65,7 +65,7 @@ class Parts(dataset_template):
                     lst_cat_labels = os.listdir(cat_labels)
                     for pts,lab in zip(lst_cat_files, lst_cat_labels):
                         print("\rLoading category %s: %d %%" % (cat_dir, int(iteration/len(lst_cat_files)*100)), end='', flush=True)
-                        occ,seg,part_count,cloud,labels = dl.load_binvox(os.path.join(cat_files,pts),os.path.join(cat_labels,lab),label_start=num_parts,grid_size=self.shape[0])
+                        occ,seg,part_count,cloud,labels = dl.load_binvox(os.path.join(cat_files,pts),os.path.join(cat_labels,lab),label_start=num_parts,grid_size=self.shape[0],ogrid_size=self.oshape[0])
                         Parts.Labels[cat_dir][Parts.PART_COUNT] = max(Parts.Labels[cat_dir][Parts.PART_COUNT], part_count)
                         data_dict[dataset_template.DATASET].append((np.reshape(occ, self.shape),seg,Parts.Labels[cat_dir][Parts.CATEGORY],cat_dir+"-"+pts,cloud,labels))
                         iteration += 1
@@ -93,9 +93,10 @@ class Parts(dataset_template):
             # print(counts)
 
 
-    def __init__(self, datapath, batch_size=1, ishape=[16,16,16,1],n_classes=256, load=True):
+    def __init__(self, datapath, batch_size=1, ishape=[16,16,16,1],n_classes=256, load=True, oshape=[16,16,16]):
         super().__init__(datapath, batch_size, ishape, n_classes)
         # declare datasets
+        self.oshape = oshape
         self.num_classes_parts = 0
         self.num_classes = 0
         self.train = { "name": "train" }
@@ -152,10 +153,18 @@ class Parts(dataset_template):
         for data_idx in dataset[Parts.ORDER][start:end]:
             data = dataset[dataset_template.DATASET][data_idx]
 
-            for rot_iter in range(0,8):
+            # append original
+            occ.append(data[0])
+            seg.append(data[1])
+            cat.append(data[2])
+            nam.append(data[3])
+            pts.append(data[4])
+            lbs.append(data[5])
+            # add augmentation
+            for rot_iter in range(0,2):
                 orig_shape = data[4].shape
                 nps = np.reshape(np.copy(data[4]), [3,-1])
-                nps = convert.rotatePoints(nps, convert.eulerToMatrix([0,rot_iter*45,0]))
+                nps = convert.rotatePoints(nps, convert.eulerToMatrix(np.random.rand(3) * 10.0))
                 nps = np.reshape(nps, orig_shape)
                 occupancy_grid, label_grid, _, _, _ = dl.load_binvox_np(nps, data[5])
                 occ.append(np.reshape(occupancy_grid, self.shape))
@@ -281,9 +290,9 @@ class Parts(dataset_template):
                 x = pointcloud[i+0]
                 y = pointcloud[i+1]
                 z = pointcloud[i+2]
-                idx_x = int(((x - cx) * extent / max_size + extent) * (self.shape[0] - 1) / (extent * 2))
-                idx_y = int(((y - cy) * extent / max_size + extent) * (self.shape[0] - 1) / (extent * 2))
-                idx_z = int(((z - cz) * extent / max_size + extent) * (self.shape[0] - 1) / (extent * 2))
+                idx_x = int(((x - cx) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
+                idx_y = int(((y - cy) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
+                idx_z = int(((z - cz) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
                 # idx_x = int(((x - cx) * extent / size_x * 2.0 + extent) * (self.shape[0] - 1) / (extent * 2))
                 # idx_y = int(((y - cy) * extent / size_y * 2.0 + extent) * (self.shape[0] - 1) / (extent * 2))
                 # idx_z = int(((z - cz) * extent / size_z * 2.0 + extent) * (self.shape[0] - 1) / (extent * 2))
@@ -293,7 +302,7 @@ class Parts(dataset_template):
             np.save(f, segmentation_res_pts)
 
 
-    def save_segmentation_mem(self, segmentation_gt_pts, segmentation_res, name, points, data_dict):
+    def save_segmentation_mem(self, segmentation_gt_pts, segmentation_res, name, points, data_dict, interpolate=False):
         name_split = name.split("-")
         cat_dir = name_split[0]
         parts = Parts.Labels[cat_dir]
@@ -321,17 +330,66 @@ class Parts(dataset_template):
         cz = size_z / 2 + min_z
         extent = int(self.shape[0] / 2)
 
+        if interpolate:
+            point_grid = np.array(np.zeros((self.oshape[0],self.oshape[0],self.oshape[0])), dtype=np.object)
+            mean_grid = np.array(np.zeros((self.oshape[0],self.oshape[0],self.oshape[0], 3)), dtype=np.float)
+
         for i in range(0,num_points,3):
             x = pointcloud[i+0]
             y = pointcloud[i+1]
             z = pointcloud[i+2]
-            idx_x = int(((x - cx) * extent / max_size + extent) * (self.shape[0] - 1) / (extent * 2))
-            idx_y = int(((y - cy) * extent / max_size + extent) * (self.shape[0] - 1) / (extent * 2))
-            idx_z = int(((z - cz) * extent / max_size + extent) * (self.shape[0] - 1) / (extent * 2))
-            # idx_x = int(((x - cx) * extent / size_x * 2.0 + extent) * (self.shape[0] - 1) / (extent * 2))
-            # idx_y = int(((y - cy) * extent / size_y * 2.0 + extent) * (self.shape[0] - 1) / (extent * 2))
-            # idx_z = int(((z - cz) * extent / size_z * 2.0 + extent) * (self.shape[0] - 1) / (extent * 2))
-            segmentation_res_pts.append(segmentation_res[idx_x,idx_y,idx_z])
+            idx_x = int(((x - cx) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
+            idx_y = int(((y - cy) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
+            idx_z = int(((z - cz) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
+            if interpolate:
+                if not point_grid[idx_x, idx_y, idx_z]:
+                    point_grid[idx_x, idx_y, idx_z] = []
+
+                point_grid[idx_x, idx_y, idx_z].append((x,y,z))
+            else:
+                segmentation_res_pts.append(segmentation_res[idx_x,idx_y,idx_z])
+
+        if interpolate:
+            for x in range(0, self.oshape[0]):
+                for y in range(0, self.oshape[0]):
+                    for z in range(0, self.oshape[0]):
+                        if point_grid[x,y,z]:
+                            for i in range(0, len(point_grid[x,y,z])):
+                                p = point_grid[x,y,z][i]
+                                mean_grid[x,y,z,0] += p[0] 
+                                mean_grid[x,y,z,1] += p[1] 
+                                mean_grid[x,y,z,2] += p[2] 
+
+                            mean_grid[x,y,z,0] /= len(point_grid[x,y,z])
+                            mean_grid[x,y,z,1] /= len(point_grid[x,y,z])
+                            mean_grid[x,y,z,2] /= len(point_grid[x,y,z])
+
+            for i in range(0,num_points,3):
+                px = pointcloud[i+0]
+                py = pointcloud[i+1]
+                pz = pointcloud[i+2]
+                idx_x = int(((px - cx) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
+                idx_y = int(((py - cy) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
+                idx_z = int(((pz - cz) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
+                closest = [0,0,0]
+                closest_dist = 10000000
+                for x in range(-1,1,1):
+                    for y in range(-1,1,1):
+                        for z in range(-1,1,1):
+                            if not (idx_x + x < 0 or idx_x + x >= self.oshape[0] or idx_y + y < 0 or idx_y + y >= self.oshape[0] or idx_z + z < 0 or idx_z + z >= self.oshape[0]):
+                                if mean_grid[idx_x+x,idx_y+y,idx_z+z,0] != 0 and mean_grid[idx_x+x,idx_y+y,idx_z+z,1] != 0 and mean_grid[idx_x+x,idx_y+y,idx_z+z,2] != 0:
+                                    dx = mean_grid[idx_x+x,idx_y+y,idx_z+z,0] - px
+                                    dy = mean_grid[idx_x+x,idx_y+y,idx_z+z,1] - py
+                                    dz = mean_grid[idx_x+x,idx_y+y,idx_z+z,2] - pz
+
+                                    d = np.sqrt(dx**2 + dy**2 + dz**2)
+                                    if d < closest_dist:
+                                        closest_dist = d
+                                        closest = [idx_x+x,idx_y+y,idx_z+z]
+
+                segmentation_res_pts.append(segmentation_res[closest[0], closest[1], closest[2]])
+                            
+
 
         segmentation_res_pts = np.array(segmentation_res_pts)
         parts[Parts.IOU_PREDICTION].append(segmentation_res_pts)
