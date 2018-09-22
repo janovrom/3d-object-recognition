@@ -67,7 +67,7 @@ class Parts(dataset_template):
                         print("\rLoading category %s: %d %%" % (cat_dir, int(iteration/len(lst_cat_files)*100)), end='', flush=True)
                         occ,seg,part_count,cloud,labels = dl.load_binvox(os.path.join(cat_files,pts),os.path.join(cat_labels,lab),label_start=num_parts,grid_size=self.shape[0],ogrid_size=self.oshape[0])
                         Parts.Labels[cat_dir][Parts.PART_COUNT] = max(Parts.Labels[cat_dir][Parts.PART_COUNT], part_count)
-                        data_dict[dataset_template.DATASET].append((np.reshape(occ, self.shape),seg,Parts.Labels[cat_dir][Parts.CATEGORY],cat_dir+"-"+pts,cloud,labels))
+                        data_dict[dataset_template.DATASET].append((np.reshape(occ, self.shape),seg,Parts.Labels[cat_dir][Parts.CATEGORY],cat_dir+"-"+pts,cloud,labels,0))
                         iteration += 1
                 
                 num_parts += Parts.Labels[cat_dir][Parts.PART_COUNT]
@@ -116,13 +116,14 @@ class Parts(dataset_template):
         dataset[dataset_template.CURRENT_BATCH] = 0
 
 
-    def next_mini_batch(self, dataset):
+    def next_mini_batch(self, dataset, update=True):
         occ = []
         seg = []
         cat = []
         nam = []
         pts = []
         lbs = []
+        acc = []
         start = dataset[dataset_template.CURRENT_BATCH] * self.batch_size
         end = min(dataset[dataset_template.NUMBER_EXAMPLES], start + self.batch_size)
 
@@ -135,11 +136,26 @@ class Parts(dataset_template):
             nam.append(data[3])
             pts.append(data[4])
             lbs.append(data[5])
+            acc.append(data[6])
+
+        if update:
+            dataset[dataset_template.CURRENT_BATCH] += 1
+
+        return np.array(occ),np.array(seg),np.array(cat),np.array(nam),np.array(pts),np.array(lbs),np.array(acc)
+
+
+    def update_mini_batch(self, dataset, new_accs, alpha=0.35):
+        start = dataset[dataset_template.CURRENT_BATCH] * self.batch_size
+        end = min(dataset[dataset_template.NUMBER_EXAMPLES], start + self.batch_size)
+
+        idx = 0
+        for data_idx in dataset[Parts.ORDER][start:end]:
+            dataset[dataset_template.DATASET][data_idx][6] = alpha * new_accs[idx] + (1 - alpha) * dataset[dataset_template.DATASET][data_idx][6]
+            idx += 1
 
         dataset[dataset_template.CURRENT_BATCH] += 1
-        return np.array(occ),np.array(seg),np.array(cat),np.array(nam),np.array(pts),np.array(lbs)
 
-    
+
     def next_mini_batch_augmented(self, dataset):
         occ = []
         seg = []
