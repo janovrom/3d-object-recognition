@@ -144,7 +144,7 @@ class Parts(dataset_template):
         return np.array(occ),np.array(seg),np.array(cat),np.array(nam),np.array(pts),np.array(lbs),np.array(acc)
 
 
-    def update_mini_batch(self, dataset, new_accs, alpha=0.35):
+    def update_mini_batch(self, dataset, new_accs, alpha=0.05):
         start = dataset[dataset_template.CURRENT_BATCH] * self.batch_size
         end = min(dataset[dataset_template.NUMBER_EXAMPLES], start + self.batch_size)
 
