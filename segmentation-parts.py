@@ -231,12 +231,21 @@ class PartsNet():
         D3 = tf.nn.dropout(A3, keep_prob)
         D3 = tf.layers.batch_normalization(D3, training=bn_training)        
         
+<<<<<<< HEAD
+=======
+        # TODO try and remove the 3,3,3 conv and use reshape instead to large vector
+>>>>>>> 7b444afeb2d94a27ca585ba23ce3da95004ad03a
         A4 = self.convolution(D3, [1,1,1,512,256], padding="VALID")
         A_cat = self.convolution(A4, [1,1,1,256,n_cat], padding="VALID", act=None)
         A_fv = tf.reshape(A_cat, [-1, n_cat])
         A_class = tf.argmax(tf.nn.softmax(A_fv), axis=-1)
         print(A_class.shape)
 
+<<<<<<< HEAD
+=======
+        # U0 = self.convolution(A4, [1,1,1,512,256], padding="VALID") #1x1x1x256
+        # TODO use A5 as input or A_cat
+>>>>>>> 7b444afeb2d94a27ca585ba23ce3da95004ad03a
         U_t = tf.tile(D3, [1,8,8,8,1])
         U_concat = tf.concat([A2, U_t], axis=-1)
         U1 = self.convolution(U_concat, [1,1,1,512+256,256], padding="SAME")
@@ -346,8 +355,12 @@ class PartsNet():
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
+<<<<<<< HEAD
         weighted_entropy_seg = weights * weighted_entropy_seg
         # weighted_entropy_seg = (1.0 - 0.95*tf.pow(weights,3)) * weighted_entropy_seg
+=======
+        weighted_entropy_seg = (1 - 0.95 * tf.pow(weights,3)) * weighted_entropy_seg
+>>>>>>> 7b444afeb2d94a27ca585ba23ce3da95004ad03a
 
         acc = tf.cast(tf.equal(tf.argmax(tf.nn.softmax(U), axis=-1, output_type=tf.int32), Y_seg), tf.float32) * Xrep
         print(acc)
@@ -469,15 +482,23 @@ class PartsNet():
                     batches = self.dataset.num_mini_batches(self.dataset.train)
                     # evaluate the scene batch
                     cc = 0
+<<<<<<< HEAD
                     min_wgs = 1.0
                     max_wgs = 0.0
+=======
+                    min_wgs = 0.0
+>>>>>>> 7b444afeb2d94a27ca585ba23ce3da95004ad03a
                     stime = time.time()
                     for i in range(batches):
                         # occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch_augmented(self.dataset.train)
                         occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train)
+<<<<<<< HEAD
                         wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
                         wgs = 1.0 - wgs # best results should have least priority
                         summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs})
+=======
+                        summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs - min_wgs})
+>>>>>>> 7b444afeb2d94a27ca585ba23ce3da95004ad03a
                         cc = cc + d_cost
                         print("\rBatch learning %05d/%d" % (i+1,batches),end="")
 
@@ -492,6 +513,7 @@ class PartsNet():
                         min_wgs = min(min_wgs, np.min(wgs))
                         max_wgs = max(max_wgs, np.max(wgs))
                         self.dataset.update_mini_batch(self.dataset.train, out[0])
+                        min_wgs = min(min_wgs, np.min(wgs))
                         print("\rUpdate weights %05d/%d" % (i+1,batches),end="")
                     
                     writer.add_summary(summary, epoch)
@@ -609,4 +631,4 @@ class PartsNet():
 if __name__ == "__main__":
     # s = PartsNet("ShapeNet", "./3d-object-recognition/UnityData")
     s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData")
-    s.run_model(load=False, train=True,visualize=False, in_memory=True)
+    s.run_model(load=True, train=True,visualize=False, in_memory=True)

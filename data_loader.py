@@ -1107,6 +1107,118 @@ def viz_points_segmentation(pts_path, gt_path, res_path):
     plt.show()
 
 
+def load_binvox_kdtree(pts, sgs, label_start=0, visualize=False, k=8, m=50):
+    points = []
+    labels = []
+    with open(pts, "r") as pts_f, open(sgs, "rb") as sgs_f:
+        lines = pts_f.readlines()
+
+        for line in lines:
+            splitted = line.split(" ")
+            points.append([float(splitted[0]),float(splitted[1]),float(splitted[2])])
+            labels.append(int(sgs_f.read(1))-1) # indexing starts from 1 in the file
+            sgs_f.read(1) # throw out newline
+
+    pointcloud = np.array(points)
+    labels = np.array(labels)
+    label_count = np.max(labels) + 1
+    labels = labels + label_start
+    num_points = int(pointcloud.shape[0])
+
+    # Find point cloud min and max
+    min_extent = np.min(pointcloud, axis=0)
+    max_extent = np.max(pointcloud, axis=0)
+    # Compute sizes 
+    size_x = max_extent[0] - min_extent[0]
+    size_y = max_extent[1] - min_extent[1]
+    size_z = max_extent[2] - min_extent[2]
+    max_size = np.max(max_extent)
+    min_size = np.min(min_extent)
+    # print("%s has size=(%f, %f, %f) meters\n" % (os.path.basename(filename), size_x, size_y, size_z))
+
+    centroids = []
+    
+
+    def recursive_split(points, min_extent, max_extent, axis):
+        middle = 0.5 * (max_extent[axis] - min_extent[axis]) + min_extent[axis]
+        cond = points[:,axis] < middle
+        L = points[cond]
+        R = points[~cond]
+
+        if L.shape[0] < m:
+            if L.shape[0] > 0:
+                centroids.append(np.mean(L,axis=0))
+        else:
+            m1 = [min_extent[0], min_extent[1], min_extent[2]]
+            m2 = [max_extent[0], max_extent[1], max_extent[2]]
+            m2[axis]=middle
+            recursive_split(L, m1, m2, (axis+1)%3)
+
+        if R.shape[0] < m:
+            if R.shape[0] > 0:
+                centroids.append(np.mean(R,axis=0))
+        else:
+            m1 = [min_extent[0], min_extent[1], min_extent[2]]
+            m2 = [max_extent[0], max_extent[1], max_extent[2]]
+            m1[axis]=middle
+            recursive_split(R, m1, m2, (axis+1)%3)
+
+
+
+    recursive_split(pointcloud, min_extent, max_extent, 0)
+    centroids = np.array(centroids)
+
+    if visualize:
+        px = []
+        py = []
+        pz = []
+        pv = []
+        px.append(0)
+        py.append(0)
+        pz.append(0)
+        px.append(0)
+        py.append(0)
+        pz.append(0)
+        pv.append(0)
+        pv.append(8)
+
+    data = []
+
+    # find minimum distances
+    for i in range(0,num_points):
+        p = pointcloud[i]
+
+        dists = np.sqrt(np.sum(np.square(centroids - p),axis=-1))
+        idxs = np.argpartition(dists,k)
+        data.append(centroids[idxs[0:k]] - p)
+
+        if visualize:
+            px.append(p[0])
+            py.append(p[1])
+            pz.append(p[1])
+            pv.append(labels[i] - label_start)
+
+
+    # viz
+    if visualize:
+        fig = plt.figure()
+        # plt.axis("scaled")
+        ax = fig.add_subplot(111, projection='3d')
+        m = plt.get_cmap("Set1")
+        plt.gca().set_aspect('scaled', adjustable='box')
+        pv = np.array(pv)
+        ax.set_xlabel('X Label')
+        ax.set_ylabel('Y Label')
+        ax.set_zlabel('Z Label')
+        # plt.axis('off')
+        ax.set_xlim(min_size,max_size)
+        ax.set_ylim(min_size,max_size)
+        ax.set_zlim(min_size,max_size)
+        ax.scatter(px, py, pz, c=pv, cmap=m, marker='p')
+
+    return np.array(data), labels, label_count, pointcloud
+
+
 def xyzl_to_binvox(filename, out_dir, data_name, category_name):
     points = []
     labels = []
