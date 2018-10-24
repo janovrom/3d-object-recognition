@@ -482,23 +482,15 @@ class PartsNet():
                     batches = self.dataset.num_mini_batches(self.dataset.train)
                     # evaluate the scene batch
                     cc = 0
-<<<<<<< HEAD
                     min_wgs = 1.0
                     max_wgs = 0.0
-=======
-                    min_wgs = 0.0
->>>>>>> 7b444afeb2d94a27ca585ba23ce3da95004ad03a
                     stime = time.time()
                     for i in range(batches):
                         # occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch_augmented(self.dataset.train)
                         occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train)
-<<<<<<< HEAD
                         wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
                         wgs = 1.0 - wgs # best results should have least priority
                         summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs})
-=======
-                        summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs - min_wgs})
->>>>>>> 7b444afeb2d94a27ca585ba23ce3da95004ad03a
                         cc = cc + d_cost
                         print("\rBatch learning %05d/%d" % (i+1,batches),end="")
 
