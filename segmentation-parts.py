@@ -194,61 +194,68 @@ class PartsNet():
         # imagine that the net operates over 32x32x32 blocks
         # feature vector learning
         # IN 32
-        # first block - 48 to 24
-        A1,M1 = self.block(X, 1, 32, keep_prob, bn_training,s3=7)
-        # 2nd block - 24 to 12
-        A2,M2 = self.block(M1, 64, 64, keep_prob, bn_training)
-        # 3rd block - 12 to 6
-        A3,M3 = self.block(M2, 128, 128, keep_prob, bn_training)
-        # 4th block - 6 to 3
-        A4,M4 = self.block(M3, 256, 256, keep_prob, bn_training)
+        # first block
+        A0_5 = self.convolution(X, [5,5,5,1,32], padding="SAME") 
+        D0_5 = tf.nn.dropout(A0_5, keep_prob)
+        D0_5 = tf.layers.batch_normalization(D0_5, training=bn_training) 
 
-        L5 = self.convolution(M4, [3,3,3,512,512], padding="VALID")
-        L5 = tf.nn.dropout(L5, keep_prob)
-        L5 = tf.layers.batch_normalization(L5, training=bn_training)
+        A0_3 = self.convolution(X, [3,3,3,1,32], padding="SAME") 
+        D0_3 = tf.nn.dropout(A0_3, keep_prob)
+        D0_3 = tf.layers.batch_normalization(D0_3, training=bn_training) 
+        A0 = tf.concat([D0_3,D0_5], axis=-1)     
+        M0 = tf.nn.max_pool3d(A0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 16
 
-        L6 = self.convolution(L5, [1,1,1,512,256], padding="VALID")
-        L6 = tf.nn.dropout(L6, keep_prob)
-        L6 = tf.layers.batch_normalization(L6, training=bn_training)
+        # second block
+        A1_5 = self.convolution(M0, [5,5,5,64,64], padding="SAME")
+        D1_5 = tf.nn.dropout(A1_5, keep_prob)        
+        D1_5 = tf.layers.batch_normalization(D1_5, training=bn_training) 
 
-        A_cat = self.convolution(L6, [1,1,1,256,n_cat], padding="VALID", act=None)
+        A1_3 = self.convolution(M0, [3,3,3,64,64], padding="SAME")
+        D1_3 = tf.nn.dropout(A1_3, keep_prob)        
+        D1_3 = tf.layers.batch_normalization(D1_3, training=bn_training)      
+        A1 = tf.concat([D1_3,D1_5], axis=-1)     
+        M1 = tf.nn.max_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8
+
+        # third block
+        A2_5 = self.convolution(M1, [5,5,5,128,128], padding="SAME")
+        D2_5 = tf.nn.dropout(A2_5, keep_prob)        
+        D2_5 = tf.layers.batch_normalization(D2_5, training=bn_training) 
+
+        A2_3 = self.convolution(M1, [3,3,3,128,128], padding="SAME")
+        D2_3 = tf.nn.dropout(A2_3, keep_prob)        
+        D2_3 = tf.layers.batch_normalization(D2_3, training=bn_training)      
+        A2 = tf.concat([D2_3,D2_5], axis=-1)     
+        M2 = tf.nn.max_pool3d(A2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 4
+
+        A3 = self.convolution(M2, [4,4,4,256,512], padding="VALID") # to 1
+        D3 = tf.nn.dropout(A3, keep_prob)
+        D3 = tf.layers.batch_normalization(D3, training=bn_training)        
+        
+        A4 = self.convolution(D3, [1,1,1,512,256], padding="VALID")
+        A_cat = self.convolution(A4, [1,1,1,256,n_cat], padding="VALID", act=None)
         A_fv = tf.reshape(A_cat, [-1, n_cat])
         A_class = tf.argmax(tf.nn.softmax(A_fv), axis=-1)
+        print(A_class.shape)
 
-        # U_t = tf.tile(L5, [1,6,6,6,1])
-        # U_concat = tf.concat([A4, U_t], axis=-1)
-        # U1 = self.convolution(U_concat, [1,1,1,512+512,256], padding="SAME")
-        # U1 = tf.nn.dropout(U1, keep_prob)
-        # U1 = tf.layers.batch_normalization(U1, training=bn_training)        
-        # U1 = self.convolution(U1, [3,3,3,256,256], padding="SAME")
-        # U1 = tf.nn.dropout(U1, keep_prob)
-        # U1 = tf.layers.batch_normalization(U1, training=bn_training)
-
-        U2 = tf.tile(L5, [1,12,12,12,1])
-        # U2 = tf.keras.layers.UpSampling3D([2,2,2])(U1) # to 12
-        U_concat1 = tf.concat([A3, U2], axis=-1)
-        U2 = self.convolution(U_concat1, [1,1,1,512+256,512], padding="SAME")
-        U2 = tf.nn.dropout(U2, keep_prob)
+        U_t = tf.tile(D3, [1,8,8,8,1])
+        U_concat = tf.concat([A2, U_t], axis=-1)
+        U1 = self.convolution(U_concat, [1,1,1,512+256,256], padding="SAME")
+        U1 = tf.layers.batch_normalization(U1, training=bn_training)        
+        U1 = self.convolution(U1, [3,3,3,256,256], padding="SAME")
+        U1 = tf.layers.batch_normalization(U1, training=bn_training)        
+        
+        U2 = tf.keras.layers.UpSampling3D([2,2,2])(U1) # to 16
+        U_concat1 = tf.concat([A1, U2], axis=-1)
+        U2 = self.convolution(U_concat1, [3,3,3,256+128,128], padding="SAME")
         U2 = tf.layers.batch_normalization(U2, training=bn_training)        
-        U2 = self.convolution(U2, [3,3,3,512,256], padding="SAME")
-        U2 = tf.nn.dropout(U2, keep_prob)
-        U2 = tf.layers.batch_normalization(U2, training=bn_training)
+        U2 = self.convolution(U2, [3,3,3,128,128], padding="SAME")
+        U2 = tf.layers.batch_normalization(U2, training=bn_training)        
 
-        U3 = tf.keras.layers.UpSampling3D([2,2,2])(U2) # to 24
-        U_concat2 = tf.concat([A2, U3], axis=-1)
-        U3 = self.convolution(U_concat2, [3,3,3,256+128,256], padding="SAME")
-        U3 = tf.nn.dropout(U3, keep_prob)
-        U3 = tf.layers.batch_normalization(U3, training=bn_training)        
-        U3 = self.convolution(U3, [3,3,3,256,128], padding="SAME")
-        U3 = tf.nn.dropout(U3, keep_prob)
-        U3 = tf.layers.batch_normalization(U3, training=bn_training)
-
-        U4 = tf.keras.layers.UpSampling3D([2,2,2])(U3) # to 48
-        U_concat3 = tf.concat([A1, U4], axis=-1)
-        U_mask = self.convolution(U_concat3, [3,3,3,128+64,128], padding="SAME")
-        U_mask = tf.nn.dropout(U_mask, keep_prob)
+        U3 = tf.keras.layers.UpSampling3D([2,2,2])(U2) # to 32
+        U_concat2 = tf.concat([A0, U3], axis=-1)
+        U_mask = self.convolution(U_concat2, [3,3,3,128+64,64], padding="SAME")
         U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)        
-        U_mask = self.convolution(U_mask, [1,1,1,128,n_seg], padding="SAME", act=None)
+        U_mask = self.convolution(U_mask, [1,1,1,64,n_seg], padding="SAME", act=None)
         U_class = tf.argmax(tf.nn.softmax(U_mask), axis=-1)
 
         return A_fv, A_class, U_mask, U_class
@@ -339,7 +346,8 @@ class PartsNet():
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
-        weighted_entropy_seg = (1 - 0.25*tf.pow(weights,6)) * weighted_entropy_seg
+        weighted_entropy_seg = weights * weighted_entropy_seg
+        # weighted_entropy_seg = (1.0 - 0.95*tf.pow(weights,3)) * weighted_entropy_seg
 
         acc = tf.cast(tf.equal(tf.argmax(tf.nn.softmax(U), axis=-1, output_type=tf.int32), Y_seg), tf.float32) * Xrep
         print(acc)
@@ -461,10 +469,14 @@ class PartsNet():
                     batches = self.dataset.num_mini_batches(self.dataset.train)
                     # evaluate the scene batch
                     cc = 0
+                    min_wgs = 1.0
+                    max_wgs = 0.0
                     stime = time.time()
                     for i in range(batches):
-                        # occ,seg,cat,names,_,_ = self.dataset.next_mini_batch_augmented(self.dataset.train)
+                        # occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch_augmented(self.dataset.train)
                         occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train)
+                        wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
+                        wgs = 1.0 - wgs # best results should have least priority
                         summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs})
                         cc = cc + d_cost
                         print("\rBatch learning %05d/%d" % (i+1,batches),end="")
@@ -477,6 +489,8 @@ class PartsNet():
                         # occ,seg,cat,names,_,_ = self.dataset.next_mini_batch_augmented(self.dataset.train)
                         occ,seg,cat,_,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train, update=False)
                         out = sess.run([acc_op], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: 1, bn_training: False, weight: wgs})
+                        min_wgs = min(min_wgs, np.min(wgs))
+                        max_wgs = max(max_wgs, np.max(wgs))
                         self.dataset.update_mini_batch(self.dataset.train, out[0])
                         print("\rUpdate weights %05d/%d" % (i+1,batches),end="")
                     
@@ -485,9 +499,7 @@ class PartsNet():
                     costs.append(cc)
                     t = time.time() - stime
                     wupdate_times.append(t)
-                    print("\nEpoch %d trained in %f, cost %f" % (epoch+1, t+train_times[-1], cc))
-                    train_times.append(t)
-                    
+                    print("\nEpoch %d trained in %f, cost %f" % (epoch+1, t+train_times[-1], cc))                    
                     
                     # save model
                     save_path = tf.train.Saver().save(sess, os.path.join(log_dir, self.name + str(epoch+1) + ".ckpt"))
@@ -522,8 +534,8 @@ class PartsNet():
                     dev_infer_time.append(avg_time)
                     dev_accuracies.append(acc)
                     plt.clf()
-                    plt.plot(np.squeeze(np.array(train_accuracies)))
-                    plt.savefig("./3d-object-recognition/ShapeNet/train_accuracies.png", format="png")
+                    plt.plot(np.squeeze(np.array(dev_accuracies)))
+                    plt.savefig("./3d-object-recognition/ShapeNet/dev_accuracies.png", format="png")
 
                     weighted_average_iou, per_category_iou = self.evaluate_iou_results(self.dataset.dev, in_memory=in_memory)
                     wious_dev.append(weighted_average_iou)
@@ -548,7 +560,7 @@ class PartsNet():
                 array2csv.append(train_infer_time)
                 array2csv.append(dev_infer_time)
                 array2csv = np.array(array2csv) # reshape so the values are in the rows
-                array2csv = np.reshape(array2csv, [array2csv.shape[1], array2csv.shape[0]])
+                array2csv = array2csv.transpose()
                 np.savetxt("./3d-object-recognition/ShapeNet/Results/" + self.name + ".csv", array2csv, delimiter=",", comments='', header="Train accuracy,Dev accuracy,"\
                 "Train weighted average IOU,Dev weighted average IOU,Training times/epoch (ms), Weight update time/epoch (ms),"\
                 "Train inference times (ms),Dev inference times (ms)")

@@ -67,7 +67,7 @@ class Parts(dataset_template):
                         print("\rLoading category %s: %d %%" % (cat_dir, int(iteration/len(lst_cat_files)*100)), end='', flush=True)
                         occ,seg,part_count,cloud,labels = dl.load_binvox(os.path.join(cat_files,pts),os.path.join(cat_labels,lab),label_start=num_parts,grid_size=self.shape[0],ogrid_size=self.oshape[0])
                         Parts.Labels[cat_dir][Parts.PART_COUNT] = max(Parts.Labels[cat_dir][Parts.PART_COUNT], part_count)
-                        data_dict[dataset_template.DATASET].append((np.reshape(occ, self.shape),seg,Parts.Labels[cat_dir][Parts.CATEGORY],cat_dir+"-"+pts,cloud,labels,0))
+                        data_dict[dataset_template.DATASET].append((np.reshape(occ, self.shape),seg,Parts.Labels[cat_dir][Parts.CATEGORY],cat_dir+"-"+pts,cloud,labels,0.5))
                         iteration += 1
                 
                 num_parts += Parts.Labels[cat_dir][Parts.PART_COUNT]
@@ -144,7 +144,7 @@ class Parts(dataset_template):
         return np.array(occ),np.array(seg),np.array(cat),np.array(nam),np.array(pts),np.array(lbs),np.array(acc)
 
 
-    def update_mini_batch(self, dataset, new_accs, alpha=0.35):
+    def update_mini_batch(self, dataset, new_accs, alpha=0.05):
         start = dataset[dataset_template.CURRENT_BATCH] * self.batch_size
         end = min(dataset[dataset_template.NUMBER_EXAMPLES], start + self.batch_size)
 
@@ -163,6 +163,7 @@ class Parts(dataset_template):
         nam = []
         pts = []
         lbs = []
+        wgs = []
         start = dataset[dataset_template.CURRENT_BATCH] * self.batch_size
         end = min(dataset[dataset_template.NUMBER_EXAMPLES], start + self.batch_size)
 
@@ -176,22 +177,32 @@ class Parts(dataset_template):
             nam.append(data[3])
             pts.append(data[4])
             lbs.append(data[5])
+            wgs.append(data[6])
             # add augmentation
-            for rot_iter in range(0,2):
+            scale_range = 3.5
+            per_point_noise_range = 2.0
+            for rot_iter in range(0,3):
+                p = np.copy(data[4])
                 orig_shape = data[4].shape
-                nps = np.reshape(np.copy(data[4]), [3,-1])
-                nps = convert.rotatePoints(nps, convert.eulerToMatrix(np.random.rand(3) * 10.0))
-                nps = np.reshape(nps, orig_shape)
-                occupancy_grid, label_grid, _, _, _ = dl.load_binvox_np(nps, data[5])
+                p = np.reshape(p, [3,-1])
+                p = convert.rotatePoints(p, convert.eulerToMatrix((0,np.random.randint(0,360),0))) # random rotation
+                p = p.transpose()
+                p = p * (1.0 + scale_range * (np.array([np.random.randint(0,500),np.random.randint(0,500),np.random.randint(0,500)]) / 500.0 - 0.5) / 5.0) # random scale in range 1 +- scale_range*0.1
+                p = p * ((np.random.rand() * 0.2 - 0.1) * per_point_noise_range + 1.0)
+                p = p.transpose()
+                p = np.reshape(p, orig_shape)
+                occupancy_grid, label_grid, _, _, _ = dl.load_binvox_np(p, data[5])
+
                 occ.append(np.reshape(occupancy_grid, self.shape))
                 seg.append(label_grid)
                 cat.append(data[2])
                 nam.append(data[3])
                 pts.append(data[4])
                 lbs.append(data[5])
+                wgs.append(data[6])
 
         dataset[dataset_template.CURRENT_BATCH] += 1
-        return np.array(occ),np.array(seg),np.array(cat),np.array(nam),np.array(pts),np.array(lbs)
+        return np.array(occ),np.array(seg),np.array(cat),np.array(nam),np.array(pts),np.array(lbs),np.array(wgs)
 
 
     # @staticmethod
@@ -208,6 +219,7 @@ class Parts(dataset_template):
         ys = []
         zs = []
         vs = []
+        gs = []
         colors = [(1,0,0), (0,1,0), (1,0.5,0), (1,1,0)]
         if category_res == category_gt:
             offset = 0
@@ -231,11 +243,22 @@ class Parts(dataset_template):
                         else:
                             vs.append(colors[0+offset])
 
+                        gs.append(segmentation_gt[x,y,z])
+
+
         fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
+        ax = fig.add_subplot(121, projection='3d')
+        ax2 = fig.add_subplot(122, projection='3d')
         m = plt.get_cmap("Set1")
         plt.title(name)
         ax.scatter(xs, ys, zs, c=vs, marker='p')
+        ax2.scatter(xs, ys, zs, c=gs, cmap=m, marker='p')
+        ax2.set_xlabel('X')
+        ax2.set_ylabel('Y')
+        ax2.set_zlabel('Z')
+        ax2.set_xlim(0,self.shape[0]-1)
+        ax2.set_ylim(0,self.shape[1]-1)
+        ax2.set_zlim(0,self.shape[2]-1)
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
@@ -318,7 +341,7 @@ class Parts(dataset_template):
             np.save(f, segmentation_res_pts)
 
 
-    def save_segmentation_mem(self, segmentation_gt_pts, segmentation_res, name, points, data_dict, interpolate=False):
+    def save_segmentation_mem(self, segmentation_gt_pts, segmentation_res, name, points, data_dict, interpolate=True):
         name_split = name.split("-")
         cat_dir = name_split[0]
         parts = Parts.Labels[cat_dir]
@@ -346,9 +369,7 @@ class Parts(dataset_template):
         cz = size_z / 2 + min_z
         extent = int(self.shape[0] / 2)
 
-        if interpolate:
-            point_grid = np.array(np.zeros((self.oshape[0],self.oshape[0],self.oshape[0])), dtype=np.object)
-            mean_grid = np.array(np.zeros((self.oshape[0],self.oshape[0],self.oshape[0], 3)), dtype=np.float)
+        num_parts = 50
 
         for i in range(0,num_points,3):
             x = pointcloud[i+0]
@@ -357,54 +378,23 @@ class Parts(dataset_template):
             idx_x = int(((x - cx) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
             idx_y = int(((y - cy) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
             idx_z = int(((z - cz) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
+            counter = np.zeros(num_parts)
             if interpolate:
-                if not point_grid[idx_x, idx_y, idx_z]:
-                    point_grid[idx_x, idx_y, idx_z] = []
+                for ix in range(-1,2):
+                    for iy in range(-1,2):
+                        for iz in range(-1,2):
+                            idx = idx_x + ix
+                            idy = idx_y + iy
+                            idz = idx_z + iz
+                            if (idx >= 0 and idy >= 0 and idz >= 0 and idx < self.oshape[0] and idy < self.oshape[0] and idz < self.oshape[0]):
+                                if (ix == 0 and iy == 0 and iz == 0):
+                                    counter[segmentation_res[idx,idy,idz]] += 10
+                                else:
+                                    counter[segmentation_res[idx,idy,idz]] += 1
 
-                point_grid[idx_x, idx_y, idx_z].append((x,y,z))
+                segmentation_res_pts.append(np.argmax(counter))
             else:
                 segmentation_res_pts.append(segmentation_res[idx_x,idx_y,idx_z])
-
-        if interpolate:
-            for x in range(0, self.oshape[0]):
-                for y in range(0, self.oshape[0]):
-                    for z in range(0, self.oshape[0]):
-                        if point_grid[x,y,z]:
-                            for i in range(0, len(point_grid[x,y,z])):
-                                p = point_grid[x,y,z][i]
-                                mean_grid[x,y,z,0] += p[0] 
-                                mean_grid[x,y,z,1] += p[1] 
-                                mean_grid[x,y,z,2] += p[2] 
-
-                            mean_grid[x,y,z,0] /= len(point_grid[x,y,z])
-                            mean_grid[x,y,z,1] /= len(point_grid[x,y,z])
-                            mean_grid[x,y,z,2] /= len(point_grid[x,y,z])
-
-            for i in range(0,num_points,3):
-                px = pointcloud[i+0]
-                py = pointcloud[i+1]
-                pz = pointcloud[i+2]
-                idx_x = int(((px - cx) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
-                idx_y = int(((py - cy) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
-                idx_z = int(((pz - cz) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
-                closest = [0,0,0]
-                closest_dist = 10000000
-                for x in range(-1,1,1):
-                    for y in range(-1,1,1):
-                        for z in range(-1,1,1):
-                            if not (idx_x + x < 0 or idx_x + x >= self.oshape[0] or idx_y + y < 0 or idx_y + y >= self.oshape[0] or idx_z + z < 0 or idx_z + z >= self.oshape[0]):
-                                if mean_grid[idx_x+x,idx_y+y,idx_z+z,0] != 0 and mean_grid[idx_x+x,idx_y+y,idx_z+z,1] != 0 and mean_grid[idx_x+x,idx_y+y,idx_z+z,2] != 0:
-                                    dx = mean_grid[idx_x+x,idx_y+y,idx_z+z,0] - px
-                                    dy = mean_grid[idx_x+x,idx_y+y,idx_z+z,1] - py
-                                    dz = mean_grid[idx_x+x,idx_y+y,idx_z+z,2] - pz
-
-                                    d = np.sqrt(dx**2 + dy**2 + dz**2)
-                                    if d < closest_dist:
-                                        closest_dist = d
-                                        closest = [idx_x+x,idx_y+y,idx_z+z]
-
-                segmentation_res_pts.append(segmentation_res[closest[0], closest[1], closest[2]])
-                            
 
 
         segmentation_res_pts = np.array(segmentation_res_pts)
@@ -431,6 +421,8 @@ class Parts(dataset_template):
         nmodels = np.zeros(ncategory)
         iou_all = np.zeros(ncategory)
         eps = 0.0000001
+        misses = np.zeros((self.num_classes_parts,self.num_classes_parts))
+        part_category = [""] * self.num_classes_parts
         for i in range(0, ncategory):
             parts = Parts.Labels[Parts.Labels[str(i)]]
             l = len(parts[Parts.IOU_GROUND_TRUTH])
@@ -440,6 +432,13 @@ class Parts(dataset_template):
             for k in range(0,l):
                 for j in range(parts[self.PART_START],parts[self.PART_START]+nparts):
                     union = np.sum(np.logical_or(parts[Parts.IOU_PREDICTION][k]==j,parts[Parts.IOU_GROUND_TRUTH][k]==j))
+                    # do some prediction statistics
+                    jth_part = parts[Parts.IOU_PREDICTION][k][parts[Parts.IOU_GROUND_TRUTH][k]==j]
+                    bins = np.bincount(jth_part, minlength=self.num_classes_parts)
+                    misses[j] += bins
+
+                    part_category[j] = Parts.Labels[str(i)] # assign category to each part
+
                     if union < eps:
                         iou_per_part[k,j-parts[self.PART_START]] = 1.0
                     else:
@@ -452,6 +451,9 @@ class Parts(dataset_template):
         iou_weighted_ave = np.sum(np.multiply(iou_all,nmodels))/np.sum(nmodels)
 
         print("Weighted average IOU is %f" % iou_weighted_ave)
+
+        # save another statistics
+        np.savetxt("./3d-object-recognition/ShapeNet/misses.csv", misses, delimiter=",", comments='', header=",".join(part_category))
 
         return iou_weighted_ave,iou_all
 

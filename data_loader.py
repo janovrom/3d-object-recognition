@@ -961,6 +961,85 @@ def load_binvox(pts, sgs, grid_size=32, ogrid_size=32, label_start=0, visualize=
     return occupancy_grid, label_grid, label_count, pointcloud, labels
 
 
+def load_npy_from_file(pts_file, grid_size=32, visualize=False):
+    with open(pts_file, "rb") as f:
+        pointcloud = np.load(f)
+        return load_npy(pointcloud, grid_size, visualize)
+
+
+def load_npy(pointcloud, grid_size=32, visualize=False):
+    num_points = int(pointcloud.shape[0])
+
+    # Find point cloud min and max
+    min_x = np.min(pointcloud[:,0])
+    min_y = np.min(pointcloud[:,1])
+    min_z = np.min(pointcloud[:,2])
+    max_x = np.max(pointcloud[:,0])
+    max_y = np.max(pointcloud[:,1])
+    max_z = np.max(pointcloud[:,2])
+    # Compute sizes 
+    size_x = max_x - min_x
+    size_y = max_y - min_y
+    size_z = max_z - min_z
+    
+    max_size = np.max([size_x, size_y, size_z])
+    min_size = min(min_x, min(min_y, min_z))
+    # print("%s has size=(%f, %f, %f) meters\n" % (os.path.basename(filename), size_x, size_y, size_z))
+    occupancy_grid = np.array(np.zeros((grid_size,grid_size,grid_size)), dtype=np.float32)
+    max_size = np.max([size_x, size_y, size_z]) / 2
+    # print("%s has size=(%f, %f, %f) meters\n" % (os.path.basename(filename), size_x, size_y, size_z))
+    cx = size_x / 2 + min_x
+    cy = size_y / 2 + min_y
+    cz = size_z / 2 + min_z
+    extent = int(grid_size / 2)
+
+    if visualize:
+        px = []
+        py = []
+        pz = []
+        pv = []
+
+
+    for i in range(0,num_points,3):
+        x = pointcloud[i,0]
+        y = pointcloud[i,1]
+        z = pointcloud[i,2]
+        idx_x = int(((x - cx) * extent / max_size + extent) * (grid_size - 1) / (extent * 2))
+        idx_y = int(((y - cy) * extent / max_size + extent) * (grid_size - 1) / (extent * 2))
+        idx_z = int(((z - cz) * extent / max_size + extent) * (grid_size - 1) / (extent * 2))
+        occupancy_grid[idx_x, idx_y, idx_z] = 1
+
+        if visualize:
+            px.append(x)
+            py.append(y)
+            pz.append(z)
+
+
+
+
+    # viz
+    if visualize:
+        fig = plt.figure()
+        # plt.axis("scaled")
+        ax = fig.add_subplot(111, projection='3d')
+        m = plt.get_cmap("Set1")
+        # plt.gca().set_aspect('scaled', adjustable='box')
+        # pv = np.array(pv)
+        ax.set_xlabel('X Label')
+        ax.set_ylabel('Y Label')
+        ax.set_zlabel('Z Label')
+        # plt.axis('off')
+        plt.gca().set_aspect('equal', adjustable='box')
+        ax.set_xlim(min_size,max_size)
+        ax.set_ylim(min_size,max_size)
+        ax.set_zlim(min_size,max_size)
+        ax.scatter(px, py, pz, c="r", marker='p')
+
+        plt.show()
+
+    return occupancy_grid, pointcloud[:,0:3]
+
+
 def viz_points_segmentation(pts_path, gt_path, res_path):
     with open(gt_path, "rb") as f:
         gt = np.load(f)
@@ -1194,16 +1273,69 @@ if __name__ == "__main__":
 #     # gt_path =  "./tmp/012938.gt"
 #     # res_path = "./tmp/012938.res"
 #     # viz_points_segmentation(pts_path, gt_path, res_path)
-#     # path_pt =  ".\\3d-object-recognition\\ShapePartsData\\dev\\dev_data\\motorbike\\012448.pts"
-#     # path_sg = ".\\3d-object-recognition\\ShapePartsData\\dev\\dev_label\\motorbike\\012448.seg"
-#     # load_binvox(path_pt, path_sg, grid_size=32, label_start=0, visualize=True)
+    path_pt =  ".\\3d-object-recognition\\ShapePartsData\\train\\train_data\\motorbike\\"
+    path_sg = ".\\3d-object-recognition\\ShapePartsData\\train\\train_label\\motorbike\\"
+    for pt_name,sg_name in zip(os.listdir(path_pt),os.listdir(path_sg)):
+        pf = os.path.join(path_pt, pt_name)
+        sf = os.path.join(path_sg, sg_name)
+        load_binvox(pf, sf, grid_size=32, label_start=0, visualize=True)
+
     # for pts,seg in zip(os.listdir("./tmp/pts/"), os.listdir("./tmp/res/")):
     #     viz_points("./tmp/pts\\" + pts, "./tmp/res\\" + seg)#, out_dir="./tmp")
     
-    path_pts = "./3d-object-recognition/UnityData/test/test_data/room"
-    path_seg = "./3d-object-recognition/UnityData/segmentation/res/test/room"
-    for pts,seg in zip(os.listdir(path_pts),os.listdir(path_seg)):
-        viz_points(os.path.join(path_pts, pts), os.path.join(path_seg, seg))
+    # path_pts = "./3d-object-recognition/UnityData/test/test_data/room"
+    # path_seg = "./3d-object-recognition/UnityData/segmentation/res/test/room"
+    # for pts,seg in zip(os.listdir(path_pts),os.listdir(path_seg)):
+    #     viz_points(os.path.join(path_pts, pts), os.path.join(path_seg, seg))
+
+    # occ, points = load_npy("./3d-object-recognition/ModelNet40/train/tv_stand/tv_stand_0025.npy")
+    # # Find point cloud min and max
+    # min_x = np.min(points[:,0])
+    # min_y = np.min(points[:,1])
+    # min_z = np.min(points[:,2])
+    # max_x = np.max(points[:,0])
+    # max_y = np.max(points[:,1])
+    # max_z = np.max(points[:,2])
+    # # Compute sizes 
+    # size_x = max_x - min_x
+    # size_y = max_y - min_y
+    # size_z = max_z - min_z
+    
+    # max_size = np.max([size_x, size_y, size_z])
+    # min_size = min(min_x, min(min_y, min_z))
+    # import mdp
+
+    # gng = mdp.nodes.GrowingNeuralGasNode(max_nodes=512)
+    # px = points[:,0]
+    # py = points[:,1]
+    # pz = points[:,2]
+    # pv = np.zeros(pz.shape)
+
+    # stime = time.time()
+    # gng.train(points)
+    # gng.stop_training()
+    # print("GNG trained in %f sec" % (time.time() - stime))
+    # positions = np.array(gng.get_nodes_position())
+    # print(positions.shape)
+
+    # px = np.concatenate([px,positions[:,0]], axis=0)
+    # py = np.concatenate([py,positions[:,1]], axis=0)
+    # pz = np.concatenate([pz,positions[:,2]], axis=0)
+    # pv = np.concatenate([pv,np.ones(positions[:,2].shape)], axis=0)
+
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    # m = plt.get_cmap("plasma")
+    # ax.set_xlabel('X Label')
+    # ax.set_ylabel('Y Label')
+    # ax.set_zlabel('Z Label')
+    # ax.set_xlim(min_size,max_size)
+    # ax.set_ylim(min_size,max_size)
+    # ax.set_zlim(min_size,max_size)
+    # plt.gca().set_aspect('equal', adjustable='box')
+    # ax.scatter(px, py, pz, c=pv, cmap=m, marker='s', s=(pv * 10.0 + 1.0))
+    # plt.show()
 
     # for xyzl_fname in os.listdir("./3d-object-recognition/UnityData/src-train"):
     #     xyzl_to_binvox(os.path.join("./3d-object-recognition/UnityData/src-train", xyzl_fname), "./3d-object-recognition/UnityData/", "train", "room")
