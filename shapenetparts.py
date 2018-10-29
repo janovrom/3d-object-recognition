@@ -18,7 +18,7 @@ class Parts(dataset_template):
         "earphone"      : 5,
         "guitar"        : 6,
         "knife"         : 7,
-        "lamp"          : 8 ,
+        "lamp"          : 8,
         "laptop"        : 9,
         "motorbike"     : 10,
         "mug"           : 11,
@@ -26,6 +26,25 @@ class Parts(dataset_template):
         "rocket"        : 13,
         "skateboard"    : 14,
         "table"         : 15
+    }
+
+    label_weights = {
+        "airplane"      : 1,
+        "bag"           : 1,
+        "cap"           : 1,
+        "car"           : 1,
+        "chair"         : 1,
+        "earphone"      : 1,
+        "guitar"        : 1,
+        "knife"         : 1,
+        "lamp"          : 1,
+        "laptop"        : 1,
+        "motorbike"     : 1,
+        "mug"           : 1,
+        "pistol"        : 1,
+        "rocket"        : 1,
+        "skateboard"    : 1,
+        "table"         : 1
     }
     
     ORDER = "order"
@@ -35,6 +54,9 @@ class Parts(dataset_template):
     PART_START = "part_start"
     IOU_GROUND_TRUTH = "iou_ground_truths"
     IOU_PREDICTION = "iou_predictions"
+    NUM_SMALLEST_CLASS = "NUM_SMALLEST_CLASS"
+    DATASET_DIRS = "DATASET_DIRS"
+    DATASET_WEIGHTS = "DATASET_WEIGHTS"
     Labels = {}
 
     def __load_dataset(self, path, data_dict, load):
@@ -43,7 +65,10 @@ class Parts(dataset_template):
             cat_idx = 0
             num_parts = 0
             data_dict[dataset_template.DATASET] = []
+            data_dict[Parts.DATASET_DIRS] = []
+            data_dict[Parts.DATASET_WEIGHTS] = []
             dict_name = data_dict["name"]
+            smallest_class = 100000000
             # list all category directories in test/dev/train dataset
             for cat_dir in os.listdir(os.path.join(path, dict_name + "_data")):
                 stime = time.time()
@@ -67,15 +92,23 @@ class Parts(dataset_template):
                         print("\rLoading category %s: %d %%" % (cat_dir, int(iteration/len(lst_cat_files)*100)), end='', flush=True)
                         occ,seg,part_count,cloud,labels = dl.load_binvox(os.path.join(cat_files,pts),os.path.join(cat_labels,lab),label_start=num_parts,grid_size=self.shape[0],ogrid_size=self.oshape[0])
                         Parts.Labels[cat_dir][Parts.PART_COUNT] = max(Parts.Labels[cat_dir][Parts.PART_COUNT], part_count)
-                        data_dict[dataset_template.DATASET].append((np.reshape(occ, self.shape),seg,Parts.Labels[cat_dir][Parts.CATEGORY],cat_dir+"-"+pts,cloud,labels,0.5))
+                        data_dict[dataset_template.DATASET].append((np.reshape(occ, self.shape),seg,Parts.Labels[cat_dir][Parts.CATEGORY],cat_dir+"-"+pts,cloud,labels))
+                        data_dict[Parts.DATASET_DIRS].append(cat_dir)
+                        data_dict[Parts.DATASET_WEIGHTS].append(Parts.label_weights[cat_dir])
                         iteration += 1
+
+                    if iteration > 0:
+                        smallest_class = min(smallest_class, iteration)
                 
                 num_parts += Parts.Labels[cat_dir][Parts.PART_COUNT]
                 print("\rCategory %s loaded in %f sec" % (cat_dir, time.time() - stime))
 
             self.num_classes_parts = max(num_parts, self.num_classes_parts)
             self.num_classes = max(cat_idx, self.num_classes)
+            data_dict[Parts.NUM_SMALLEST_CLASS] = smallest_class
             data_dict[dataset_template.DATASET] = np.array(data_dict[dataset_template.DATASET])
+            data_dict[Parts.DATASET_DIRS] = np.array(data_dict[Parts.DATASET_DIRS])
+            data_dict[Parts.DATASET_WEIGHTS] = np.array(data_dict[Parts.DATASET_WEIGHTS])
             data_dict[dataset_template.NUMBER_EXAMPLES] = data_dict[dataset_template.DATASET].shape[0]
             data_dict[Parts.ORDER] = np.random.permutation(data_dict[dataset_template.NUMBER_EXAMPLES])
             data_dict[dataset_template.CURRENT_BATCH] = 0
@@ -111,8 +144,31 @@ class Parts(dataset_template):
         print("Datasets train/dev/test loaded in %f seconds." % (time.time() - stime))
         
 
-    def restart_mini_batches(self, dataset):
-        dataset[Parts.ORDER] = np.random.permutation(dataset[dataset_template.NUMBER_EXAMPLES])
+    def restart_mini_batches(self, dataset, train=False):
+        if train:
+            order = []
+            iter_start = 0
+            for key in Parts.label_dict.keys():
+                idx = dataset[Parts.DATASET_DIRS] == key # get indices for this class
+                wgs = dataset[Parts.DATASET_WEIGHTS][idx] # get weights for class
+                data = dataset[dataset_template.DATASET][idx] # get data for class
+
+                sorted_idx = wgs.argsort() # get indices for sorted weights
+
+                dataset[Parts.DATASET_WEIGHTS][idx] = wgs[sorted_idx] # update
+                dataset[dataset_template.DATASET][idx] = data[sorted_idx] 
+                # create order for first num_smallest_class models with lowest weights
+                order.extend(np.arange(iter_start, iter_start+dataset[Parts.NUM_SMALLEST_CLASS]))
+                iter_start += dataset[Parts.NUM_SMALLEST_CLASS]
+
+            dataset[Parts.ORDER] = np.array(order)
+            dataset[Parts.ORDER] = np.random.permutation(dataset[Parts.ORDER].shape[0])
+            dataset[dataset_template.NUMBER_EXAMPLES] = dataset[Parts.ORDER].shape[0]
+        else:
+            dataset[dataset_template.NUMBER_EXAMPLES] = dataset[dataset_template.DATASET].shape[0]
+            dataset[Parts.ORDER] = np.random.permutation(dataset[dataset_template.NUMBER_EXAMPLES])
+
+        dataset[dataset_template.NUMBER_BATCHES] = int(dataset[dataset_template.NUMBER_EXAMPLES] / self.batch_size) + (0 if dataset[dataset_template.NUMBER_EXAMPLES] % self.batch_size == 0 else 1)
         dataset[dataset_template.CURRENT_BATCH] = 0
 
 
@@ -136,7 +192,7 @@ class Parts(dataset_template):
             nam.append(data[3])
             pts.append(data[4])
             lbs.append(data[5])
-            acc.append(data[6])
+            acc.append(dataset[Parts.DATASET_WEIGHTS][data_idx])
 
         if update:
             dataset[dataset_template.CURRENT_BATCH] += 1
@@ -150,7 +206,7 @@ class Parts(dataset_template):
 
         idx = 0
         for data_idx in dataset[Parts.ORDER][start:end]:
-            dataset[dataset_template.DATASET][data_idx][6] = alpha * new_accs[idx] + (1 - alpha) * dataset[dataset_template.DATASET][data_idx][6]
+            dataset[Parts.DATASET_WEIGHTS][data_idx] = alpha * new_accs[idx] + (1 - alpha) * dataset[Parts.DATASET_WEIGHTS][data_idx]
             idx += 1
 
         dataset[dataset_template.CURRENT_BATCH] += 1

@@ -231,21 +231,12 @@ class PartsNet():
         D3 = tf.nn.dropout(A3, keep_prob)
         D3 = tf.layers.batch_normalization(D3, training=bn_training)        
         
-<<<<<<< HEAD
-=======
-        # TODO try and remove the 3,3,3 conv and use reshape instead to large vector
->>>>>>> 7b444afeb2d94a27ca585ba23ce3da95004ad03a
         A4 = self.convolution(D3, [1,1,1,512,256], padding="VALID")
         A_cat = self.convolution(A4, [1,1,1,256,n_cat], padding="VALID", act=None)
         A_fv = tf.reshape(A_cat, [-1, n_cat])
         A_class = tf.argmax(tf.nn.softmax(A_fv), axis=-1)
         print(A_class.shape)
 
-<<<<<<< HEAD
-=======
-        # U0 = self.convolution(A4, [1,1,1,512,256], padding="VALID") #1x1x1x256
-        # TODO use A5 as input or A_cat
->>>>>>> 7b444afeb2d94a27ca585ba23ce3da95004ad03a
         U_t = tf.tile(D3, [1,8,8,8,1])
         U_concat = tf.concat([A2, U_t], axis=-1)
         U1 = self.convolution(U_concat, [1,1,1,512+256,256], padding="SAME")
@@ -355,12 +346,8 @@ class PartsNet():
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
-<<<<<<< HEAD
-        weighted_entropy_seg = weights * weighted_entropy_seg
-        # weighted_entropy_seg = (1.0 - 0.95*tf.pow(weights,3)) * weighted_entropy_seg
-=======
-        weighted_entropy_seg = (1 - 0.95 * tf.pow(weights,3)) * weighted_entropy_seg
->>>>>>> 7b444afeb2d94a27ca585ba23ce3da95004ad03a
+        # weighted_entropy_seg = weights * weighted_entropy_seg
+        weighted_entropy_seg = (1.0 - 0.75*tf.pow(weights,3)) * weighted_entropy_seg
 
         acc = tf.cast(tf.equal(tf.argmax(tf.nn.softmax(U), axis=-1, output_type=tf.int32), Y_seg), tf.float32) * Xrep
         print(acc)
@@ -477,8 +464,10 @@ class PartsNet():
                 train_infer_time = []
                 dev_infer_time = []
 
+                restarts = [False] * 100
+                restarts.extend([True] * 10)
                 for epoch in range(0, self.num_epochs):
-                    self.dataset.restart_mini_batches(self.dataset.train)
+                    self.dataset.restart_mini_batches(self.dataset.train, train=restarts[epoch])
                     batches = self.dataset.num_mini_batches(self.dataset.train)
                     # evaluate the scene batch
                     cc = 0
@@ -594,7 +583,7 @@ class PartsNet():
             # acc_dev = accuracy_test(self.dataset, self.dataset.dev)
             
             # print("Train/Dev/Test accuracies %f/%f/%f" %(acc_train, acc_dev, acc_test))
-            plt.show()
+            # plt.show()
 
 
     def evaluate_iou_results(self, data_dict={ "name" : "train"}, in_memory=True):
