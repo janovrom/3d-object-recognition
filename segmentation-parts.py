@@ -15,7 +15,7 @@ class PartsNet():
     def create_placeholders(self, n_y, n_seg):
         X = tf.placeholder(dtype=tf.float32, shape=(None,self.dataset.shape[0],self.dataset.shape[1],self.dataset.shape[2],1), name="input_grid")
         weight = tf.placeholder(dtype=tf.float32, shape=(None), name="loss_weights")
-        Y_seg = tf.placeholder(dtype=tf.int32, shape=(None,self.dataset.oshape[0],self.dataset.oshape[1],self.dataset.oshape[2]), name="segmentation_labels")
+        Y_seg = tf.placeholder(dtype=tf.float32, shape=(None,self.dataset.oshape[0],self.dataset.oshape[1],self.dataset.oshape[2],n_seg), name="segmentation_labels")
         Y_cat = tf.placeholder(dtype=tf.int32, shape=(None), name="category_labels")
         keep_prob = tf.placeholder(dtype=tf.float32, name="keep_probability")
         bn_training = tf.placeholder(dtype=tf.bool, name="batch_norm_training")
@@ -337,19 +337,21 @@ class PartsNet():
 
 
     def compute_cost(self, U, Y_seg, X, A, Y_cat, n_seg, weights):
-        U = (U + weights) * X 
+        U = U * X 
         Xrep = tf.reshape(X, [-1, X.shape[1], X.shape[2], X.shape[3]])
         entropy_cat = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=Y_cat, logits=A) # used
-        weighted_entropy_seg = tf.nn.softmax_cross_entropy_with_logits(labels=tf.one_hot(Y_seg, n_seg) * X, logits=U) * Xrep
+        weighted_entropy_seg = tf.nn.l2_loss(U - Y_seg * X)
+        # weighted_entropy_seg = tf.nn.softmax_cross_entropy_with_logits(labels=tf.one_hot(Y_seg, n_seg) * X, logits=U) * Xrep
         # weighted_entropy_seg = tf.losses.softmax_cross_entropy(onehot_labels=tf.one_hot(Y_seg, n_seg) * X, logits=U, weights=(1 - 0.75*tf.pow(weights,8)))
-        print(weighted_entropy_seg)
-        weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
-        weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
-        weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
+        # print(weighted_entropy_seg)
+        # weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
+        # weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
+        # weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
         # weighted_entropy_seg = weights * weighted_entropy_seg
         # weighted_entropy_seg = (1.0 - 0.75*tf.pow(weights,3)) * weighted_entropy_seg
 
-        acc = tf.cast(tf.equal(tf.argmax(tf.nn.softmax(U), axis=-1, output_type=tf.int32), Y_seg), tf.float32) * Xrep
+        # acc = tf.cast(tf.equal(tf.argmax(tf.nn.softmax(U), axis=-1, output_type=tf.int32), Y_seg), tf.float32) * Xrep
+        acc = tf.cast(tf.equal(tf.argmax(tf.nn.softmax(U), axis=-1, output_type=tf.int32), tf.argmax(Y_seg, axis=-1, output_type=tf.int32)), tf.float32) * Xrep
         print(acc)
         acc = tf.reduce_sum(acc, axis=-1)
         acc = tf.reduce_sum(acc, axis=-1)
@@ -385,6 +387,7 @@ class PartsNet():
         
         # get model
         A_fv, A_class, U_mask, U_class = self.forward_propagation(X, n_cat, n_seg, keep_prob, bn_training)
+        U_smax = tf.nn.softmax(U_mask)
         cost,acc_op = self.compute_cost(U_mask, Y_seg, X, A_fv, Y_cat, n_seg, weight)
 
         # declare optimizations
@@ -416,7 +419,7 @@ class PartsNet():
                 stime = time.time()
                 occ,seg,cat,names,points,lbs,wgs = self.dataset.next_mini_batch(data_dict)
                 # deconvolved_images,d_cost = sess.run([U_class,cost], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: 1.0})
-                deconvolved_images,d_cost,pred_class,seg_vec = sess.run([U_class,cost,A_class,tf.nn.softmax(U_mask)], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: wgs})
+                deconvolved_images,d_cost,pred_class,seg_vec = sess.run([U_class,cost,A_class,U_smax], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: wgs})
 
                 # for j in range(0, seg_vec.shape[0]):
                 #     mask = np.zeros(n_seg)
@@ -435,7 +438,7 @@ class PartsNet():
                 acc_cat = acc_cat + np.sum(cat == predicted_category) / predicted_category.shape[0]
                 
                 for j in range(0, deconvolved_images.shape[0]):
-                    dataset.save_segmentation(lbs[j], deconvolved_images[j], names[j], points[j], data_dict, in_memory=in_memory)
+                    dataset.save_segmentation(np.copy(lbs[j]), deconvolved_images[j], names[j], np.copy(points[j]), data_dict, in_memory=in_memory)
  
                 if visualize:
                     for j in range(0, deconvolved_images.shape[0]):
@@ -446,6 +449,7 @@ class PartsNet():
 
             print("\r%s deconvolution average accuracy %f" % (data_dict["name"], acc / dataset.num_mini_batches(data_dict)))
             print("%s category accuracy %f" % (data_dict["name"], acc_cat / dataset.num_mini_batches(data_dict)))
+            
             return float(acc / dataset.num_mini_batches(data_dict)), avg_time / dataset.num_mini_batches(data_dict)
 
         config = tf.ConfigProto()
@@ -529,6 +533,7 @@ class PartsNet():
                     plt.savefig("./3d-object-recognition/ShapeNet/train_accuracies.png", format="png")
 
                     weighted_average_iou, per_category_iou = self.evaluate_iou_results() # has to be after the accuracy_test, so it has saved and current values
+                    self.dataset.clear_segmentation(self.dataset.train, in_memory=in_memory) # just to free some memory
                     wious.append(weighted_average_iou)
                     # plt.figure(3)
                     plt.clf()
@@ -549,6 +554,7 @@ class PartsNet():
                     plt.savefig("./3d-object-recognition/ShapeNet/dev_accuracies.png", format="png")
 
                     weighted_average_iou, per_category_iou = self.evaluate_iou_results(self.dataset.dev, in_memory=in_memory)
+                    self.dataset.clear_segmentation(self.dataset.dev, in_memory=in_memory) # just to free some memory
                     wious_dev.append(weighted_average_iou)
                     # plt.figure(3)
                     plt.clf()
@@ -620,4 +626,4 @@ class PartsNet():
 if __name__ == "__main__":
     # s = PartsNet("ShapeNet", "./3d-object-recognition/UnityData")
     s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData")
-    s.run_model(load=False, train=True,visualize=False, in_memory=True)
+    s.run_model(load=True, train=True,visualize=False, in_memory=True)

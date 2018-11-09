@@ -90,9 +90,9 @@ class Parts(dataset_template):
                     lst_cat_labels = os.listdir(cat_labels)
                     for pts,lab in zip(lst_cat_files, lst_cat_labels):
                         print("\rLoading category %s: %d %%" % (cat_dir, int(iteration/len(lst_cat_files)*100)), end='', flush=True)
-                        occ,seg,part_count,cloud,labels = dl.load_binvox(os.path.join(cat_files,pts),os.path.join(cat_labels,lab),label_start=num_parts,grid_size=self.shape[0],ogrid_size=self.oshape[0])
+                        part_count = dl.load_binvox_vec_lab(os.path.join(cat_files,pts),os.path.join(cat_labels,lab),label_start=num_parts,grid_size=self.shape[0],ogrid_size=self.oshape[0],getLabelCount=True)
                         Parts.Labels[cat_dir][Parts.PART_COUNT] = max(Parts.Labels[cat_dir][Parts.PART_COUNT], part_count)
-                        data_dict[dataset_template.DATASET].append((np.reshape(occ, self.shape),seg,Parts.Labels[cat_dir][Parts.CATEGORY],cat_dir+"-"+pts,cloud,labels))
+                        data_dict[dataset_template.DATASET].append((cat_files,pts,cat_labels,lab,num_parts))
                         data_dict[Parts.DATASET_DIRS].append(cat_dir)
                         data_dict[Parts.DATASET_WEIGHTS].append(Parts.label_weights[cat_dir])
                         iteration += 1
@@ -185,13 +185,14 @@ class Parts(dataset_template):
 
         for data_idx in dataset[Parts.ORDER][start:end]:
             data = dataset[dataset_template.DATASET][data_idx]
-
-            occ.append(data[0])
-            seg.append(data[1])
-            cat.append(data[2])
-            nam.append(data[3])
-            pts.append(data[4])
-            lbs.append(data[5])
+            o,s,_,c,l = dl.load_binvox_vec_lab(os.path.join(data[0],data[1]),os.path.join(data[2],data[3]),label_start=int(data[4]),grid_size=self.shape[0],ogrid_size=self.oshape[0])
+            
+            occ.append(np.reshape(o,[self.shape[0], self.shape[1], self.shape[2], 1]))
+            seg.append(s)
+            cat.append(Parts.Labels[dataset[Parts.DATASET_DIRS][data_idx]][Parts.CATEGORY])
+            nam.append(dataset[Parts.DATASET_DIRS][data_idx]+"-"+data[1])
+            pts.append(c)
+            lbs.append(l)
             acc.append(dataset[Parts.DATASET_WEIGHTS][data_idx])
 
         if update:
@@ -327,9 +328,14 @@ class Parts(dataset_template):
     def clear_segmentation(self, data_dict, in_memory=True):
         if in_memory:
             for i in range(0,self.num_classes):
-                parts = Parts.Labels[Parts.Labels[str(i)]]
-                parts[Parts.IOU_GROUND_TRUTH] = []
-                parts[Parts.IOU_PREDICTION] = []
+                if Parts.IOU_GROUND_TRUTH not in Parts.Labels[Parts.Labels[str(i)]]:
+                    Parts.Labels[Parts.Labels[str(i)]][Parts.IOU_GROUND_TRUTH] = []
+
+                if Parts.IOU_PREDICTION not in Parts.Labels[Parts.Labels[str(i)]]:
+                    Parts.Labels[Parts.Labels[str(i)]][Parts.IOU_PREDICTION] = []
+
+                Parts.Labels[Parts.Labels[str(i)]][Parts.IOU_GROUND_TRUTH].clear()
+                Parts.Labels[Parts.Labels[str(i)]][Parts.IOU_PREDICTION].clear()
         else:
             paths = [os.path.join(self.dataset_path, "segmentation/gt", data_dict["name"]), os.path.join(self.dataset_path, "segmentation/res", data_dict["name"])]
             for path in paths:
@@ -397,7 +403,7 @@ class Parts(dataset_template):
             np.save(f, segmentation_res_pts)
 
 
-    def save_segmentation_mem(self, segmentation_gt_pts, segmentation_res, name, points, data_dict, interpolate=True):
+    def save_segmentation_mem(self, segmentation_gt_pts, segmentation_res, name, points, data_dict, interpolate=False):
         name_split = name.split("-")
         cat_dir = name_split[0]
         parts = Parts.Labels[cat_dir]
