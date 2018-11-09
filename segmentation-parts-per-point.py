@@ -41,7 +41,7 @@ class PartsNet():
     def block(self, X, filter_size, in_size, out_size, keep_prob, bn_training, activation=tf.nn.relu):
         A = self.convolution(X, [filter_size,in_size,out_size], act=activation, padding="VALID")
         D = tf.nn.dropout(A, keep_prob)
-        D = tf.layers.batch_normalization(D, training=bn_training)
+        # D = tf.layers.batch_normalization(D, training=bn_training)
         print(D)
 
         return D
