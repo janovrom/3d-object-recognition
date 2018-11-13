@@ -55,6 +55,7 @@ class Parts(dataset_template):
     IOU_GROUND_TRUTH = "iou_ground_truths"
     IOU_PREDICTION = "iou_predictions"
     NUM_SMALLEST_CLASS = "NUM_SMALLEST_CLASS"
+    NUM_LARGEST_CLASS = "NUM_LARGEST_CLASS"
     DATASET_DIRS = "DATASET_DIRS"
     DATASET_WEIGHTS = "DATASET_WEIGHTS"
     Labels = {}
@@ -69,6 +70,7 @@ class Parts(dataset_template):
             data_dict[Parts.DATASET_WEIGHTS] = []
             dict_name = data_dict["name"]
             smallest_class = 100000000
+            largest_class = 0
             # list all category directories in test/dev/train dataset
             for cat_dir in os.listdir(os.path.join(path, dict_name + "_data")):
                 stime = time.time()
@@ -99,6 +101,7 @@ class Parts(dataset_template):
 
                     if iteration > 0:
                         smallest_class = min(smallest_class, iteration)
+                        largest_class = max(largest_class, iteration)
                 
                 num_parts += Parts.Labels[cat_dir][Parts.PART_COUNT]
                 print("\rCategory %s loaded in %f sec" % (cat_dir, time.time() - stime))
@@ -106,6 +109,7 @@ class Parts(dataset_template):
             self.num_classes_parts = max(num_parts, self.num_classes_parts)
             self.num_classes = max(cat_idx, self.num_classes)
             data_dict[Parts.NUM_SMALLEST_CLASS] = smallest_class
+            data_dict[Parts.NUM_LARGEST_CLASS] = largest_class
             data_dict[dataset_template.DATASET] = np.array(data_dict[dataset_template.DATASET])
             data_dict[Parts.DATASET_DIRS] = np.array(data_dict[Parts.DATASET_DIRS])
             data_dict[Parts.DATASET_WEIGHTS] = np.array(data_dict[Parts.DATASET_WEIGHTS])
@@ -148,21 +152,31 @@ class Parts(dataset_template):
         if train:
             order = []
             iter_start = 0
+            idxs = np.random.permutation(dataset[Parts.NUM_LARGEST_CLASS])
             for key in Parts.label_dict.keys():
                 idx = dataset[Parts.DATASET_DIRS] == key # get indices for this class
-                wgs = dataset[Parts.DATASET_WEIGHTS][idx] # get weights for class
-                data = dataset[dataset_template.DATASET][idx] # get data for class
+                # get first element: starting index
+                start = np.nonzero(idx)[0][0]
+                count = np.sum(idx)
+                indices = np.mod(idxs, count) + start
+                order.append(indices)
 
-                sorted_idx = wgs.argsort() # get indices for sorted weights
+            order = np.ravel(np.column_stack(order))
+            # for key in Parts.label_dict.keys():
+            #     idx = dataset[Parts.DATASET_DIRS] == key # get indices for this class
+            #     wgs = dataset[Parts.DATASET_WEIGHTS][idx] # get weights for class
+            #     data = dataset[dataset_template.DATASET][idx] # get data for class
 
-                dataset[Parts.DATASET_WEIGHTS][idx] = wgs[sorted_idx] # update
-                dataset[dataset_template.DATASET][idx] = data[sorted_idx] 
-                # create order for first num_smallest_class models with lowest weights
-                order.extend(np.arange(iter_start, iter_start+dataset[Parts.NUM_SMALLEST_CLASS]))
-                iter_start += dataset[Parts.NUM_SMALLEST_CLASS]
+            #     sorted_idx = wgs.argsort() # get indices for sorted weights
+
+            #     dataset[Parts.DATASET_WEIGHTS][idx] = wgs[sorted_idx] # update
+            #     dataset[dataset_template.DATASET][idx] = data[sorted_idx] 
+            #     # create order for first num_smallest_class models with lowest weights
+            #     order.extend(np.arange(iter_start, iter_start+dataset[Parts.NUM_SMALLEST_CLASS]))
+            #     iter_start += dataset[Parts.NUM_SMALLEST_CLASS]
 
             dataset[Parts.ORDER] = np.array(order)
-            dataset[Parts.ORDER] = np.random.permutation(dataset[Parts.ORDER].shape[0])
+            # dataset[Parts.ORDER] = np.random.permutation(dataset[Parts.ORDER].shape[0])
             dataset[dataset_template.NUMBER_EXAMPLES] = dataset[Parts.ORDER].shape[0]
         else:
             dataset[dataset_template.NUMBER_EXAMPLES] = dataset[dataset_template.DATASET].shape[0]
@@ -397,7 +411,7 @@ class Parts(dataset_template):
             np.save(f, segmentation_res_pts)
 
 
-    def save_segmentation_mem(self, segmentation_gt_pts, segmentation_res, name, points, data_dict, interpolate=True):
+    def save_segmentation_mem(self, segmentation_gt_pts, segmentation_res, name, points, data_dict, interpolate=False):
         name_split = name.split("-")
         cat_dir = name_split[0]
         parts = Parts.Labels[cat_dir]
@@ -427,6 +441,13 @@ class Parts(dataset_template):
 
         num_parts = 50
 
+        vsize_x = size_x / self.oshape[0]
+        start_x = vsize_x * 0.5
+        vsize_y = size_y / self.oshape[0]
+        start_y = vsize_y * 0.5
+        vsize_z = size_z / self.oshape[0]
+        start_z = vsize_z * 0.5
+
         for i in range(0,num_points,3):
             x = pointcloud[i+0]
             y = pointcloud[i+1]
@@ -443,10 +464,14 @@ class Parts(dataset_template):
                             idy = idx_y + iy
                             idz = idx_z + iz
                             if (idx >= 0 and idy >= 0 and idz >= 0 and idx < self.oshape[0] and idy < self.oshape[0] and idz < self.oshape[0]):
-                                if (ix == 0 and iy == 0 and iz == 0):
-                                    counter[segmentation_res[idx,idy,idz]] += 10
-                                else:
-                                    counter[segmentation_res[idx,idy,idz]] += 1
+                                px = start_x + vsize_x * idx
+                                py = start_y + vsize_y * idy
+                                pz = start_z + vsize_z * idz
+                                dx = px - x
+                                dy = py - y
+                                dz = pz - z
+                                counter += (dx**2 + dy**2 + dz**2) * segmentation_res[idx,idy,idz]
+
 
                 segmentation_res_pts.append(np.argmax(counter))
             else:
@@ -457,9 +482,9 @@ class Parts(dataset_template):
         parts[Parts.IOU_PREDICTION].append(segmentation_res_pts)
         
 
-    def save_segmentation(self, segmentation_gt_pts, segmentation_res, name, points, data_dict, in_memory=True):
+    def save_segmentation(self, segmentation_gt_pts, segmentation_res, name, points, data_dict, in_memory=True, interpolate=False):
         if in_memory:
-            return self.save_segmentation_mem(segmentation_gt_pts, segmentation_res, name, points, data_dict)
+            return self.save_segmentation_mem(segmentation_gt_pts, segmentation_res, name, points, data_dict, interpolate=interpolate)
         else:
             return self.save_segmentation_disc(segmentation_gt_pts, segmentation_res, name, points, data_dict)
 

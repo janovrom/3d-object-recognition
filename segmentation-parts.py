@@ -15,7 +15,7 @@ class PartsNet():
     def create_placeholders(self, n_y, n_seg):
         X = tf.placeholder(dtype=tf.float32, shape=(None,self.dataset.shape[0],self.dataset.shape[1],self.dataset.shape[2],1), name="input_grid")
         weight = tf.placeholder(dtype=tf.float32, shape=(None), name="loss_weights")
-        Y_seg = tf.placeholder(dtype=tf.int32, shape=(None,self.dataset.oshape[0],self.dataset.oshape[1],self.dataset.oshape[2]), name="segmentation_labels")
+        Y_seg = tf.placeholder(dtype=tf.int32, shape=(None), name="segmentation_labels")
         Y_cat = tf.placeholder(dtype=tf.int32, shape=(None), name="category_labels")
         keep_prob = tf.placeholder(dtype=tf.float32, name="keep_probability")
         bn_training = tf.placeholder(dtype=tf.bool, name="batch_norm_training")
@@ -337,7 +337,7 @@ class PartsNet():
 
 
     def compute_cost(self, U, Y_seg, X, A, Y_cat, n_seg, weights):
-        U = (U + weights) * X 
+        U = U * X 
         Xrep = tf.reshape(X, [-1, X.shape[1], X.shape[2], X.shape[3]])
         entropy_cat = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=Y_cat, logits=A) # used
         weighted_entropy_seg = tf.nn.softmax_cross_entropy_with_logits(labels=tf.one_hot(Y_seg, n_seg) * X, logits=U) * Xrep
@@ -373,7 +373,7 @@ class PartsNet():
 
 
 
-    def run_model(self, load=False, train=True,visualize=True, in_memory=True):
+    def run_model(self, load=False, train=True,visualize=True, in_memory=True, interpolate=True):
         log_dir = os.path.join("./3d-object-recognition", self.name)
         tf.reset_default_graph()
         n_cat = self.dataset.num_classes
@@ -387,6 +387,7 @@ class PartsNet():
         
         # get model
         A_fv, A_class, U_mask, U_class = self.forward_propagation(X, n_cat, n_seg, keep_prob, bn_training)
+        U_vec = tf.nn.softmax(U_mask)
         cost,acc_op = self.compute_cost(U_mask, Y_seg, X, A_fv, Y_cat, n_seg, weight)
 
         # declare optimizations
@@ -418,7 +419,7 @@ class PartsNet():
                 stime = time.time()
                 occ,seg,cat,names,points,lbs,wgs = self.dataset.next_mini_batch(data_dict)
                 # deconvolved_images,d_cost = sess.run([U_class,cost], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: 1.0})
-                deconvolved_images,d_cost,pred_class,seg_vec = sess.run([U_class,cost,A_class,tf.nn.softmax(U_mask)], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: wgs})
+                deconvolved_images,d_cost,pred_class,seg_vec,feat_vec = sess.run([U_class,cost,A_class,U_vec,U_mask], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: wgs})
 
                 # for j in range(0, seg_vec.shape[0]):
                 #     mask = np.zeros(n_seg)
@@ -437,7 +438,10 @@ class PartsNet():
                 acc_cat = acc_cat + np.sum(cat == predicted_category) / predicted_category.shape[0]
                 
                 for j in range(0, deconvolved_images.shape[0]):
-                    dataset.save_segmentation(lbs[j], deconvolved_images[j], names[j], points[j], data_dict, in_memory=in_memory)
+                    if interpolate:
+                        dataset.save_segmentation(lbs[j], seg_vec[j], names[j], points[j], data_dict, in_memory=in_memory, interpolate=interpolate)
+                    else:
+                        dataset.save_segmentation(lbs[j], deconvolved_images[j], names[j], points[j], data_dict, in_memory=in_memory, interpolate=interpolate)
  
                 if visualize:
                     for j in range(0, deconvolved_images.shape[0]):
@@ -474,7 +478,7 @@ class PartsNet():
                 train_infer_time = []
                 dev_infer_time = []
 
-                restarts = [False] * 100
+                restarts = [True] * 100
                 restarts.extend([True] * 10)
                 for epoch in range(0, self.num_epochs):
                     self.dataset.restart_mini_batches(self.dataset.train, train=restarts[epoch])
@@ -622,4 +626,4 @@ class PartsNet():
 if __name__ == "__main__":
     # s = PartsNet("ShapeNet", "./3d-object-recognition/UnityData")
     s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData")
-    s.run_model(load=False, train=True,visualize=False, in_memory=True)
+    s.run_model(load=False, train=True,visualize=False, in_memory=True,interpolate=False)
