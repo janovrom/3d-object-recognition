@@ -215,13 +215,14 @@ class Parts(dataset_template):
 
                 occ.append(np.reshape(occupancy_grid, self.shape))
                 seg.append(label_grid)
+                pts.append(p)                
             else:
                 occ.append(data[0])
                 seg.append(data[1])
+                pts.append(data[4])
 
             cat.append(data[2])
             nam.append(data[3])
-            pts.append(data[4])
             lbs.append(data[5])
             acc.append(dataset[Parts.DATASET_WEIGHTS][data_idx])
 
