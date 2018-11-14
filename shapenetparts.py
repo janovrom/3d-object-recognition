@@ -186,6 +186,39 @@ class Parts(dataset_template):
         dataset[dataset_template.CURRENT_BATCH] = 0
 
 
+    def next_vote_mini_batch(self, dataset):
+        occ = []
+        seg = []
+        cat = []
+        nam = []
+        pts = []
+        lbs = []
+        acc = []
+
+        data_idx = dataset[dataset_template.CURRENT_BATCH]
+        data = dataset[dataset_template.DATASET][data_idx]
+
+        for i in range(0, 360, 360 / self.batch_size):
+            p = np.copy(data[4])
+            orig_shape = data[4].shape
+            p = np.reshape(p, [3,-1])
+            p = convert.rotatePoints(p, convert.eulerToMatrix((0,np.random.randint(0,360),0))) # random rotation
+            p = p.transpose()
+            p = np.reshape(p, orig_shape)
+            occupancy_grid,label_grid,_,_,_ = dl.load_binvox_np(p, data[5])
+            occ.append(np.reshape(occupancy_grid, self.shape))
+            seg.append(label_grid)
+            cat.append(data[2])
+            nam.append(data[3])
+            pts.append(p)
+            lbs.append(data[5])
+            acc.append(dataset[Parts.DATASET_WEIGHTS][data_idx])
+
+        dataset[dataset_template.CURRENT_BATCH] += 1
+
+        return np.array(occ),np.array(seg),np.array(cat),np.array(nam),np.array(pts),np.array(lbs),np.array(acc)
+
+
     def next_mini_batch(self, dataset, update=True, augment=False):
         occ = []
         seg = []
@@ -215,13 +248,14 @@ class Parts(dataset_template):
 
                 occ.append(np.reshape(occupancy_grid, self.shape))
                 seg.append(label_grid)
+                pts.append(p)                
             else:
                 occ.append(data[0])
                 seg.append(data[1])
+                pts.append(data[4])
 
             cat.append(data[2])
             nam.append(data[3])
-            pts.append(data[4])
             lbs.append(data[5])
             acc.append(dataset[Parts.DATASET_WEIGHTS][data_idx])
 
@@ -427,6 +461,58 @@ class Parts(dataset_template):
             segmentation_res_pts = np.array(segmentation_res_pts)
             np.save(f, segmentation_res_pts)
 
+
+    def save_segmentation_vote_mem(self, segmentation_gt_pts, segmentation_res, name, points, data_dict):
+        name_split = name.split("-")
+        cat_dir = name_split[0]
+        parts = Parts.Labels[cat_dir]
+        parts[Parts.IOU_GROUND_TRUTH].append(segmentation_gt_pts)
+        # convert point cloud and grid results to point cloud results
+        pointcloud = np.array(points)
+        num_points = int(pointcloud.shape[0])
+        segmentation_res_pts = []
+        # Find point cloud min and max
+        min_x = np.min(pointcloud[0::3])
+        min_y = np.min(pointcloud[1::3])
+        min_z = np.min(pointcloud[2::3])
+        max_x = np.max(pointcloud[0::3])
+        max_y = np.max(pointcloud[1::3])
+        max_z = np.max(pointcloud[2::3])
+        # Compute sizes 
+        size_x = max_x - min_x
+        size_y = max_y - min_y
+        size_z = max_z - min_z
+        
+        max_size = np.max([size_x, size_y, size_z])
+        max_size = np.max([size_x, size_y, size_z]) / 2
+        cx = size_x / 2 + min_x
+        cy = size_y / 2 + min_y
+        cz = size_z / 2 + min_z
+        extent = int(self.shape[0] / 2)
+
+        num_parts = 50
+
+        vsize_x = size_x / self.oshape[0]
+        start_x = vsize_x * 0.5
+        vsize_y = size_y / self.oshape[0]
+        start_y = vsize_y * 0.5
+        vsize_z = size_z / self.oshape[0]
+        start_z = vsize_z * 0.5
+
+        for i in range(0,num_points,3):
+            x = pointcloud[i+0]
+            y = pointcloud[i+1]
+            z = pointcloud[i+2]
+            idx_x = int(((x - cx) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
+            idx_y = int(((y - cy) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
+            idx_z = int(((z - cz) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
+            counter = np.zeros(num_parts)
+            segmentation_res_pts.append(segmentation_res[idx_x,idx_y,idx_z])
+
+
+        segmentation_res_pts = np.array(segmentation_res_pts)
+        parts[Parts.IOU_PREDICTION].append(segmentation_res_pts)
+     
 
     def save_segmentation_mem(self, segmentation_gt_pts, segmentation_res, name, points, data_dict, interpolate=False):
         name_split = name.split("-")

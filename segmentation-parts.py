@@ -417,7 +417,8 @@ class PartsNet():
             dataset.clear_segmentation(data_dict, in_memory=in_memory)
             for i in range(dataset.num_mini_batches(data_dict)):
                 stime = time.time()
-                occ,seg,cat,names,points,lbs,wgs = self.dataset.next_mini_batch(data_dict)
+                # occ,seg,cat,names,points,lbs,wgs = self.dataset.next_mini_batch(data_dict)
+                occ,seg,cat,names,points,lbs,wgs = self.dataset.next_vote_mini_batch(data_dict)
                 # deconvolved_images,d_cost = sess.run([U_class,cost], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: 1.0})
                 deconvolved_images,d_cost,pred_class,seg_vec,feat_vec = sess.run([U_class,cost,A_class,U_vec,U_mask], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: wgs})
 
