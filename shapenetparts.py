@@ -200,8 +200,8 @@ class Parts(dataset_template):
         for data_idx in dataset[Parts.ORDER][start:end]:
             data = dataset[dataset_template.DATASET][data_idx]
             if augment:
-                scale_range = 1.75
-                per_point_noise_range = 1.0
+                scale_range = 0.0
+                per_point_noise_range = 0.0
                 p = np.copy(data[4])
                 orig_shape = data[4].shape
                 p = np.reshape(p, [3,-1])

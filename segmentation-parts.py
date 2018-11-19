@@ -488,13 +488,23 @@ class PartsNet():
                     max_wgs = 0.0
                     stime = time.time()
                     for i in range(batches):
-                        # occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch_augmented(self.dataset.train)
-                        occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train,augment=augment)
+                        # train for other cases (the augmented ones)
+                        if augment:
+                            for _ in range(0, 4):
+                                occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train,augment=augment,update=False)
+                                wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
+                                wgs = 1.0 - wgs # best results should have least priority
+                                summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs})
+                                cc = cc + d_cost
+
+                        # always train on unscaled data
+                        occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train)
                         wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
                         wgs = 1.0 - wgs # best results should have least priority
                         summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs})
                         cc = cc + d_cost
                         print("\rBatch learning %05d/%d" % (i+1,batches),end="")
+
 
                     print("")
                     train_times.append(time.time() - stime)
