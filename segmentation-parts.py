@@ -438,11 +438,13 @@ class PartsNet():
                 acc = acc + a
                 acc_cat = acc_cat + np.sum(cat == predicted_category) / predicted_category.shape[0]
                 
-                for j in range(0, deconvolved_images.shape[0]):
-                    if interpolate:
-                        dataset.save_segmentation(lbs[j], seg_vec[j], names[j], points[j], data_dict, in_memory=in_memory, interpolate=interpolate)
-                    else:
-                        dataset.save_segmentation(lbs[j], deconvolved_images[j], names[j], points[j], data_dict, in_memory=in_memory, interpolate=interpolate)
+                dataset.save_segmentation_vote_mem(lbs, deconvolved_images, names[0], points, data_dict)
+
+                # for j in range(0, deconvolved_images.shape[0]):
+                #     if interpolate:
+                #         dataset.save_segmentation(lbs[j], seg_vec[j], names[j], points[j], data_dict, in_memory=in_memory, interpolate=interpolate)
+                #     else:
+                #         dataset.save_segmentation(lbs[j], deconvolved_images[j], names[j], points[j], data_dict, in_memory=in_memory, interpolate=interpolate)
  
                 if visualize:
                     for j in range(0, deconvolved_images.shape[0]):
@@ -490,7 +492,8 @@ class PartsNet():
                     stime = time.time()
                     for i in range(batches):
                         # occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch_augmented(self.dataset.train)
-                        occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train,augment=augment)
+                        # occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train,augment=augment)
+                        occ,seg,cat,names,_,_,wgs = self.dataset.next_vote_mini_batch(self.dataset.train)
                         wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
                         wgs = 1.0 - wgs # best results should have least priority
                         summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs})
@@ -627,4 +630,4 @@ class PartsNet():
 if __name__ == "__main__":
     # s = PartsNet("ShapeNet", "./3d-object-recognition/UnityData")
     s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData")
-    s.run_model(load=False, train=True,visualize=False, in_memory=True,interpolate=False,augment=True)
+    s.run_model(load=True, train=False,visualize=False, in_memory=True,interpolate=False,augment=True)

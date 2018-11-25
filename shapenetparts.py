@@ -195,14 +195,14 @@ class Parts(dataset_template):
         lbs = []
         acc = []
 
-        data_idx = dataset[dataset_template.CURRENT_BATCH]
+        data_idx = dataset[Parts.ORDER][dataset[dataset_template.CURRENT_BATCH]]
         data = dataset[dataset_template.DATASET][data_idx]
 
-        for _ in range(0, 360, 360 / self.batch_size):
+        for rot in range(-15, 30, 15):
             p = np.copy(data[4])
             orig_shape = data[4].shape
-            p = np.reshape(p, [3,-1])
-            p = convert.rotatePoints(p, convert.eulerToMatrix((0,np.random.randint(0,360),0))) # random rotation
+            p = np.reshape(p, [-1,3]).transpose()
+            p = convert.rotatePoints(p, convert.eulerToMatrix((0,rot,0))) # random rotation
             p = p.transpose()
             p = np.reshape(p, orig_shape)
             occupancy_grid,label_grid,_,_,_ = dl.load_binvox_np(p, data[5])
@@ -457,12 +457,13 @@ class Parts(dataset_template):
         name_split = name.split("-")
         cat_dir = name_split[0]
         parts = Parts.Labels[cat_dir]
-        parts[Parts.IOU_GROUND_TRUTH].append(segmentation_gt_pts)
+        parts[Parts.IOU_GROUND_TRUTH].append(segmentation_gt_pts[0])
         # convert point cloud and grid results to point cloud results
         num_parts = 50
-        counter = np.zeros((points[0].shape[0], num_parts))
+        counter = np.zeros((int(points.shape[1]/3), num_parts))
         for i in range(0, points.shape[0]):
             pointcloud = np.array(points[i])
+            seg = segmentation_res[i]
             num_points = int(pointcloud.shape[0])
             # Find point cloud min and max
             min_x = np.min(pointcloud[0::3])
@@ -483,15 +484,15 @@ class Parts(dataset_template):
             cz = size_z / 2 + min_z
             extent = int(self.shape[0] / 2)
 
-            for i in range(0,num_points,3):
-                x = pointcloud[i+0]
-                y = pointcloud[i+1]
-                z = pointcloud[i+2]
+            for j in range(0,num_points,3):
+                x = pointcloud[j+0]
+                y = pointcloud[j+1]
+                z = pointcloud[j+2]
                 idx_x = int(((x - cx) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
                 idx_y = int(((y - cy) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
                 idx_z = int(((z - cz) * extent / max_size + extent) * (self.oshape[0] - 1) / (extent * 2))
-                idx = int(i/3)
-                counter[idx,segmentation_res[idx_x,idx_y,idx_z]] += 1
+                idx = int(j/3)
+                counter[idx,seg[idx_x,idx_y,idx_z]] += 1
 
 
         segmentation_res_pts = np.argmax(counter, axis=-1)
