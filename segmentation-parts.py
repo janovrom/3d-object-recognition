@@ -490,7 +490,7 @@ class PartsNet():
                     for i in range(batches):
                         # train for other cases (the augmented ones)
                         if augment:
-                            for _ in range(0, 4):
+                            for _ in range(0, 3):
                                 occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train,augment=augment,update=False)
                                 wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
                                 wgs = 1.0 - wgs # best results should have least priority
@@ -636,4 +636,4 @@ class PartsNet():
 if __name__ == "__main__":
     # s = PartsNet("ShapeNet", "./3d-object-recognition/UnityData")
     s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData")
-    s.run_model(load=False, train=True,visualize=False, in_memory=True,interpolate=False,augment=True)
+    s.run_model(load=True, train=True,visualize=False, in_memory=True,interpolate=False,augment=True)
