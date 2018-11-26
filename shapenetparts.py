@@ -204,12 +204,12 @@ class Parts(dataset_template):
                 per_point_noise_range = 0.0
                 p = np.copy(data[4])
                 orig_shape = data[4].shape
-                p = np.reshape(p, [-1,3]).transpose()
+                p = np.reshape(p, [-1,3])
                 p = convert.rotatePoints(p, convert.eulerToMatrix((0,np.random.randint(0,360),0))) # random rotation
-                p = p.transpose()
-                p = p * (1.0 + scale_range * (np.array([np.random.randint(0,500),np.random.randint(0,500),np.random.randint(0,500)]) / 500.0 - 0.5) / 5.0) # random scale in range 1 +- scale_range*0.1
-                p = p * ((np.random.rand() * 0.2 - 0.1) * per_point_noise_range + 1.0)
-                p = p.transpose()
+                # p = p.transpose()
+                # p = p * (1.0 + scale_range * (np.array([np.random.randint(0,500),np.random.randint(0,500),np.random.randint(0,500)]) / 500.0 - 0.5) / 5.0) # random scale in range 1 +- scale_range*0.1
+                # p = p * ((np.random.rand() * 0.2 - 0.1) * per_point_noise_range + 1.0)
+                # p = p.transpose()
                 p = np.reshape(p, orig_shape)
                 occupancy_grid,label_grid,_,_,_ = dl.load_binvox_np(p, data[5])
 
