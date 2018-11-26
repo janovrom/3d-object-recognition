@@ -198,7 +198,7 @@ class Parts(dataset_template):
         data_idx = dataset[Parts.ORDER][dataset[dataset_template.CURRENT_BATCH]]
         data = dataset[dataset_template.DATASET][data_idx]
 
-        for rot in range(-15, 30, 15):
+        for rot in range(-15, 20, 5):
             p = np.copy(data[4])
             orig_shape = data[4].shape
             p = np.reshape(p, [-1,3]).transpose()
