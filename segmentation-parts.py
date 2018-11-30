@@ -636,4 +636,4 @@ class PartsNet():
 if __name__ == "__main__":
     # s = PartsNet("ShapeNet", "./3d-object-recognition/UnityData")
     s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData")
-    s.run_model(load=True, train=True,visualize=False, in_memory=True,interpolate=False,augment=True)
+    s.run_model(load=True, train=False,visualize=False, in_memory=True,interpolate=False,augment=True)
