@@ -197,15 +197,11 @@ class Parts(dataset_template):
 
         data_idx = dataset[Parts.ORDER][dataset[dataset_template.CURRENT_BATCH]]
         data = dataset[dataset_template.DATASET][data_idx]
-
-        for rot in range(-6, 7, 2):
+        offsets = [[-1,-1,-1],[-1,-1,1],[-1,1,-1],[1,-1,-1],[-1,1,1],[1,-1,1],[1,1,-1],[1,1,1],[0,0,0]]
+        pad = 0.5
+        for offset in offsets:
             p = np.copy(data[4])
-            orig_shape = data[4].shape
-            p = np.reshape(p, [-1,3]).transpose()
-            p = convert.rotatePoints(p, convert.eulerToMatrix((0,rot,0))) # random rotation
-            p = p.transpose()
-            p = np.reshape(p, orig_shape)
-            occupancy_grid,label_grid,_,_,_ = dl.load_binvox_np(p, data[5])
+            occupancy_grid,label_grid,_,_,_ = dl.load_binvox_np(p, data[5],padding=pad,offset=np.array(offset)*0.1*pad)
             occ.append(np.reshape(occupancy_grid, self.shape))
             seg.append(label_grid)
             cat.append(data[2])
@@ -213,6 +209,23 @@ class Parts(dataset_template):
             pts.append(p)
             lbs.append(data[5])
             acc.append(dataset[Parts.DATASET_WEIGHTS][data_idx])
+            
+
+        # for rot in range(-6, 7, 2):
+        #     p = np.copy(data[4])
+        #     orig_shape = data[4].shape
+        #     p = np.reshape(p, [-1,3]).transpose()
+        #     p = convert.rotatePoints(p, convert.eulerToMatrix((0,rot,0))) # random rotation
+        #     p = p.transpose()
+        #     p = np.reshape(p, orig_shape)
+        #     occupancy_grid,label_grid,_,_,_ = dl.load_binvox_np(p, data[5])
+        #     occ.append(np.reshape(occupancy_grid, self.shape))
+        #     seg.append(label_grid)
+        #     cat.append(data[2])
+        #     nam.append(data[3])
+        #     pts.append(p)
+        #     lbs.append(data[5])
+        #     acc.append(dataset[Parts.DATASET_WEIGHTS][data_idx])
 
         dataset[dataset_template.CURRENT_BATCH] += 1
 

@@ -746,7 +746,7 @@ def load_xyzl_as_occlussion(filename, grid_size=32):
     return occupancy_grid, label_grid
 
 
-def load_binvox_np(pointcloud, labels, grid_size=32, visualize=False):
+def load_binvox_np(pointcloud, labels, grid_size=32, visualize=False, padding=0, offset=[0,0,0]):
     num_points = int(pointcloud.shape[0])
     # Find point cloud min and max
     min_x = np.min(pointcloud[0::3])
@@ -761,15 +761,17 @@ def load_binvox_np(pointcloud, labels, grid_size=32, visualize=False):
     size_z = max_z - min_z
     
     max_size = np.max([size_x, size_y, size_z])
+    voxel_size = max_size / grid_size
+    max_size += voxel_size * padding
     # print("%s has size=(%f, %f, %f) meters\n" % (os.path.basename(filename), size_x, size_y, size_z))
     occupancy_grid = np.array(np.zeros((grid_size,grid_size,grid_size)), dtype=np.float32)
     label_grid = np.array(np.zeros((grid_size,grid_size,grid_size)), dtype=np.int32)
     hist_grid = np.array(np.zeros((grid_size,grid_size,grid_size)), dtype=np.object)
     max_size = np.max([size_x, size_y, size_z]) / 2
     # print("%s has size=(%f, %f, %f) meters\n" % (os.path.basename(filename), size_x, size_y, size_z))
-    cx = size_x / 2 + min_x
-    cy = size_y / 2 + min_y
-    cz = size_z / 2 + min_z
+    cx = size_x / 2 + min_x + offset[0] * voxel_size
+    cy = size_y / 2 + min_y + offset[1] * voxel_size
+    cz = size_z / 2 + min_z + offset[2] * voxel_size
     extent = int(grid_size / 2)
 
     for i in range(0,num_points,3):
