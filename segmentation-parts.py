@@ -350,7 +350,7 @@ class PartsNet():
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
-        weighted_entropy_seg = weights * weighted_entropy_seg
+        weighted_entropy_seg = weighted_entropy_seg
         # weighted_entropy_seg = (1.0 - 0.95*tf.pow(weights,3)) * weighted_entropy_seg
         # weighted_entropy_seg = weights * weighted_entropy_seg
         # weighted_entropy_seg = (1.0 - 0.75*tf.pow(weights,3)) * weighted_entropy_seg
@@ -377,7 +377,7 @@ class PartsNet():
 
 
 
-    def run_model(self, load=False, train=True,visualize=True, in_memory=True, interpolate=True):
+    def run_model(self, load=False, train=True,visualize=True, in_memory=True, interpolate=True, augment=True):
         log_dir = os.path.join("./3d-object-recognition", self.name)
         tf.reset_default_graph()
         n_cat = self.dataset.num_classes
@@ -483,7 +483,6 @@ class PartsNet():
                 dev_infer_time = []
 
                 restarts = [True] * 100
-                restarts.extend([True] * 10)
                 for epoch in range(0, self.num_epochs):
                     self.dataset.restart_mini_batches(self.dataset.train, train=restarts[epoch])
                     batches = self.dataset.num_mini_batches(self.dataset.train)
@@ -493,7 +492,16 @@ class PartsNet():
                     max_wgs = 0.0
                     stime = time.time()
                     for i in range(batches):
-                        # occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch_augmented(self.dataset.train)
+                        # train for other cases (the augmented ones)
+                        if augment:
+                            for _ in range(0, 3):
+                                occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train,augment=augment,update=False)
+                                wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
+                                wgs = 1.0 - wgs # best results should have least priority
+                                summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs})
+                                cc = cc + d_cost
+
+                        # always train on unscaled data
                         occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train)
                         # wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
                         # wgs = 1.0 - wgs # best results should have least priority
@@ -501,19 +509,21 @@ class PartsNet():
                         cc = cc + d_cost
                         print("\rBatch learning %05d/%d" % (i+1,batches),end="")
 
+
                     print("")
                     train_times.append(time.time() - stime)
                     self.dataset.restart_mini_batches(self.dataset.train)
                     stime = time.time()                    
-                    # for i in range(batches):
-                    #     # occ,seg,cat,names,_,_ = self.dataset.next_mini_batch_augmented(self.dataset.train)
-                    #     occ,seg,cat,_,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train, update=False)
-                    #     out = sess.run([acc_op], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: 1, bn_training: False, weight: wgs})
-                    #     min_wgs = min(min_wgs, np.min(wgs))
-                    #     max_wgs = max(max_wgs, np.max(wgs))
-                    #     self.dataset.update_mini_batch(self.dataset.train, out[0])
-                    #     min_wgs = min(min_wgs, np.min(wgs))
-                    #     print("\rUpdate weights %05d/%d" % (i+1,batches),end="")
+                    batches = self.dataset.num_mini_batches(self.dataset.train)
+                    for i in range(batches):
+                        # occ,seg,cat,names,_,_ = self.dataset.next_mini_batch_augmented(self.dataset.train)
+                        occ,seg,cat,_,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train, update=False)
+                        out = sess.run([acc_op], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: 1, bn_training: False, weight: wgs})
+                        min_wgs = min(min_wgs, np.min(wgs))
+                        max_wgs = max(max_wgs, np.max(wgs))
+                        self.dataset.update_mini_batch(self.dataset.train, out[0])
+                        min_wgs = min(min_wgs, np.min(wgs))
+                        print("\rUpdate weights %05d/%d" % (i+1,batches),end="")
                     
                     writer.add_summary(summary, epoch)
                     cc = cc / (self.dataset.num_examples(self.dataset.train))
@@ -630,4 +640,4 @@ class PartsNet():
 if __name__ == "__main__":
     # s = PartsNet("ShapeNet", "./3d-object-recognition/UnityData")
     s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData")
-    s.run_model(load=False, train=True,visualize=False, in_memory=True,interpolate=False)
+    s.run_model(load=True, train=False,visualize=False, in_memory=True,interpolate=False,augment=True)
