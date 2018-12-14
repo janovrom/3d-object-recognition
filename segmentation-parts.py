@@ -206,6 +206,8 @@ class PartsNet():
         M0 = tf.nn.max_pool3d(A0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 16
 
         # second block
+        mask = tf.nn.max_pool3d(X, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID")
+        M0 = M0 * mask
         A1_5 = self.convolution(M0, [5,5,5,64,64], padding="SAME")
         D1_5 = tf.nn.dropout(A1_5, keep_prob)        
         D1_5 = tf.layers.batch_normalization(D1_5, training=bn_training) 
@@ -217,6 +219,8 @@ class PartsNet():
         M1 = tf.nn.max_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8
 
         # third block
+        mask = tf.nn.max_pool3d(mask, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID")
+        M1 = M1 * mask
         A2_5 = self.convolution(M1, [5,5,5,128,128], padding="SAME")
         D2_5 = tf.nn.dropout(A2_5, keep_prob)        
         D2_5 = tf.layers.batch_normalization(D2_5, training=bn_training) 
@@ -491,8 +495,8 @@ class PartsNet():
                     for i in range(batches):
                         # occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch_augmented(self.dataset.train)
                         occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train)
-                        wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
-                        wgs = 1.0 - wgs # best results should have least priority
+                        # wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
+                        # wgs = 1.0 - wgs # best results should have least priority
                         summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs})
                         cc = cc + d_cost
                         print("\rBatch learning %05d/%d" % (i+1,batches),end="")
