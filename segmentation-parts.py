@@ -3,7 +3,7 @@ import numpy as np
 import json
 import os
 import shutil
-from nn_utils import *
+from nn_template import *
 from shapenetparts import Parts
 import sys
 import time
@@ -25,9 +25,10 @@ class PartsNet():
     
     def convolution(self, X, shape, strides=[1,1,1,1,1], padding="SAME", act=tf.nn.relu):
         # tf.contrib.layers.xavier_initializer(uniform=False)
-        W = tf.get_variable("weights" + str(self.layer_idx), shape, initializer=tf.variance_scaling_initializer(), dtype=tf.float32, regularizer=tf.contrib.layers.l2_regularizer(self.lr_dec))
-        b = tf.get_variable("biases" + str(self.layer_idx), shape[-1], initializer=tf.zeros_initializer(), dtype=tf.float32, regularizer=tf.contrib.layers.l2_regularizer(self.lr_dec))
-        Z = tf.nn.conv3d(X, W, strides=strides, padding=padding) + b
+        W = tf.get_variable("weights" + str(self.layer_idx), shape, initializer=tf.variance_scaling_initializer(), dtype=tf.float32, regularizer=tf.contrib.layers.l2_regularizer(self.l2_reg_w))
+        # T = tf.get_variable("biastransform" + str(self.layer_idx), [X.shape[1], X.shape[2], X.shape[3]], initializer=tf.variance_scaling_initializer(), dtype=tf.float32, regularizer=tf.contrib.layers.l2_regularizer(self.lr_dec))
+        b = tf.get_variable("biases" + str(self.layer_idx), shape[-1], initializer=tf.zeros_initializer(), dtype=tf.float32, regularizer=tf.contrib.layers.l2_regularizer(self.l2_reg_b))
+        Z = tf.nn.conv3d(X, W, strides=strides, padding=padding) + b #T * b
 
         tf.summary.histogram("weights" + str(self.layer_idx), W)
         tf.summary.histogram("biases" + str(self.layer_idx), b)
@@ -39,6 +40,7 @@ class PartsNet():
         return Z
 
 
+    
     def forward_propagation_great_small_but_efficient(self, X, n_cat, n_seg, keep_prob, bn_training):
         self.layer_idx = 0
         # imagine that the net operates over 32x32x32 blocks
@@ -183,10 +185,50 @@ class PartsNet():
         A0_3 = self.convolution(X, [s3,s3,s3,in_size,out_size], padding="SAME") 
         D0_3 = tf.nn.dropout(A0_3, keep_prob)
         D0_3 = tf.layers.batch_normalization(D0_3, training=bn_training) 
-        A0 = tf.concat([D0_3,D0_5], axis=-1)     
-        M0 = tf.nn.max_pool3d(A0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID")
+        A0 = tf.concat([D0_3,D0_5], axis=-1)
 
-        return A0, M0
+        A0 = self.convolution(A0, [1,1,1,out_size*2, out_size*2], padding="SAME")    
+        A0 = tf.nn.dropout(A0, keep_prob)
+        A0 = tf.layers.batch_normalization(A0, training=bn_training)
+
+        A0 = self.convolution(A0, [1,1,1,out_size*2, out_size*2], padding="SAME")    
+        A0 = tf.nn.dropout(A0, keep_prob)
+        A0 = tf.layers.batch_normalization(A0, training=bn_training)    
+
+        return A0
+
+
+    def convolution_block(self, X0,X1,X2,X3,X4,X5,X6,X7, shape, keep_prob, bn_training, strides=[1,1,1,1,1], padding="SAME", act=tf.nn.relu):
+        # tf.contrib.layers.xavier_initializer(uniform=False)
+        W = tf.get_variable("weights" + str(self.layer_idx), shape, initializer=tf.variance_scaling_initializer(), dtype=tf.float32, regularizer=tf.contrib.layers.l2_regularizer(self.lr_dec))
+        tf.summary.histogram("weights" + str(self.layer_idx), W)
+
+        if act != None:
+            Z = {  
+                "X0": act(tf.nn.conv3d(X0, W, strides=strides, padding=padding)),
+                "X1": act(tf.nn.conv3d(X1, W, strides=strides, padding=padding)),
+                "X2": act(tf.nn.conv3d(X2, W, strides=strides, padding=padding)),
+                "X3": act(tf.nn.conv3d(X3, W, strides=strides, padding=padding)),
+                "X4": act(tf.nn.conv3d(X4, W, strides=strides, padding=padding)),
+                "X5": act(tf.nn.conv3d(X5, W, strides=strides, padding=padding)),
+                "X6": act(tf.nn.conv3d(X6, W, strides=strides, padding=padding)),
+                "X7": act(tf.nn.conv3d(X7, W, strides=strides, padding=padding))
+            }
+        else:
+            Z = { 
+                "X0": tf.nn.conv3d(X0, W, strides=strides, padding=padding),
+                "X1": tf.nn.conv3d(X1, W, strides=strides, padding=padding),
+                "X2": tf.nn.conv3d(X2, W, strides=strides, padding=padding),
+                "X3": tf.nn.conv3d(X3, W, strides=strides, padding=padding),
+                "X4": tf.nn.conv3d(X4, W, strides=strides, padding=padding),
+                "X5": tf.nn.conv3d(X5, W, strides=strides, padding=padding),
+                "X6": tf.nn.conv3d(X6, W, strides=strides, padding=padding),
+                "X7": tf.nn.conv3d(X7, W, strides=strides, padding=padding)
+            }
+
+
+        self.layer_idx = self.layer_idx + 1
+        return Z
 
 
     def forward_propagation(self, X, n_cat, n_seg, keep_prob, bn_training):
@@ -195,39 +237,21 @@ class PartsNet():
         # feature vector learning
         # IN 32
         # first block
-        A0_5 = self.convolution(X, [5,5,5,1,32], padding="SAME") 
-        D0_5 = tf.nn.dropout(A0_5, keep_prob)
-        D0_5 = tf.layers.batch_normalization(D0_5, training=bn_training) 
-
-        A0_3 = self.convolution(X, [3,3,3,1,32], padding="SAME") 
-        D0_3 = tf.nn.dropout(A0_3, keep_prob)
-        D0_3 = tf.layers.batch_normalization(D0_3, training=bn_training) 
-        A0 = tf.concat([D0_3,D0_5], axis=-1)     
-        M0 = tf.nn.max_pool3d(A0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 16
+        A0 = self.block(X, 1, 16, keep_prob, bn_training)
+        M0 = self.convolution(A0, [2,2,2,32,32],strides=[1,2,2,2,1],padding="VALID") # seems reasonable well
+        # M0 = tf.nn.max_pool3d(A0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 16
 
         # second block
-        A1_5 = self.convolution(M0, [5,5,5,64,64], padding="SAME")
-        D1_5 = tf.nn.dropout(A1_5, keep_prob)        
-        D1_5 = tf.layers.batch_normalization(D1_5, training=bn_training) 
-
-        A1_3 = self.convolution(M0, [3,3,3,64,64], padding="SAME")
-        D1_3 = tf.nn.dropout(A1_3, keep_prob)        
-        D1_3 = tf.layers.batch_normalization(D1_3, training=bn_training)      
-        A1 = tf.concat([D1_3,D1_5], axis=-1)     
-        M1 = tf.nn.max_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8
+        A1 = self.block(M0, 32, 32, keep_prob, bn_training)
+        M1 = self.convolution(A1, [2,2,2,64,64],strides=[1,2,2,2,1],padding="VALID")
+        # M1 = tf.nn.max_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8
 
         # third block
-        A2_5 = self.convolution(M1, [5,5,5,128,128], padding="SAME")
-        D2_5 = tf.nn.dropout(A2_5, keep_prob)        
-        D2_5 = tf.layers.batch_normalization(D2_5, training=bn_training) 
+        A2 = self.block(M1, 64, 64, keep_prob, bn_training)
+        M2 = self.convolution(A2, [2,2,2,128,128],strides=[1,2,2,2,1],padding="VALID")    
+        # M2 = tf.nn.max_pool3d(A2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 4
 
-        A2_3 = self.convolution(M1, [3,3,3,128,128], padding="SAME")
-        D2_3 = tf.nn.dropout(A2_3, keep_prob)        
-        D2_3 = tf.layers.batch_normalization(D2_3, training=bn_training)      
-        A2 = tf.concat([D2_3,D2_5], axis=-1)     
-        M2 = tf.nn.max_pool3d(A2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 4
-
-        A3 = self.convolution(M2, [4,4,4,256,512], padding="VALID") # to 1
+        A3 = self.convolution(M2, [4,4,4,128,512], padding="VALID") # to 1
         D3 = tf.nn.dropout(A3, keep_prob)
         D3 = tf.layers.batch_normalization(D3, training=bn_training)        
         
@@ -239,26 +263,55 @@ class PartsNet():
 
         U_t = tf.tile(D3, [1,8,8,8,1])
         U_concat = tf.concat([A2, U_t], axis=-1)
-        U1 = self.convolution(U_concat, [1,1,1,512+256,256], padding="SAME")
+        U1 = self.convolution(U_concat, [1,1,1,512+128,256], padding="SAME")
         U1 = tf.layers.batch_normalization(U1, training=bn_training)        
         U1 = self.convolution(U1, [3,3,3,256,256], padding="SAME")
-        U1 = tf.layers.batch_normalization(U1, training=bn_training)        
+        U1 = tf.layers.batch_normalization(U1, training=bn_training)  
+        U1 = self.convolution(U1, [1,1,1,256,256], padding="SAME")
+        U1 = tf.layers.batch_normalization(U1, training=bn_training) 
+        U1 = self.convolution(U1, [3,3,3,256,256], padding="SAME")
+        U1 = tf.layers.batch_normalization(U1, training=bn_training) 
+        U1 = self.convolution(U1, [1,1,1,256,256], padding="SAME")
+        U1 = tf.layers.batch_normalization(U1, training=bn_training)     
         
         U2 = tf.keras.layers.UpSampling3D([2,2,2])(U1) # to 16
         U_concat1 = tf.concat([A1, U2], axis=-1)
-        U2 = self.convolution(U_concat1, [3,3,3,256+128,128], padding="SAME")
+        U2 = self.convolution(U_concat1, [1,1,1,256+64,128], padding="SAME")
         U2 = tf.layers.batch_normalization(U2, training=bn_training)        
         U2 = self.convolution(U2, [3,3,3,128,128], padding="SAME")
+        U2 = tf.layers.batch_normalization(U2, training=bn_training)        
+        U2 = self.convolution(U2, [1,1,1,128,128], padding="SAME")
+        U2 = tf.layers.batch_normalization(U2, training=bn_training)  
+        U2 = self.convolution(U2, [3,3,3,128,128], padding="SAME")
+        U2 = tf.layers.batch_normalization(U2, training=bn_training)  
+        U2 = self.convolution(U2, [1,1,1,128,128], padding="SAME")
         U2 = tf.layers.batch_normalization(U2, training=bn_training)        
 
         U3 = tf.keras.layers.UpSampling3D([2,2,2])(U2) # to 32
         U_concat2 = tf.concat([A0, U3], axis=-1)
-        U_mask = self.convolution(U_concat2, [3,3,3,128+64,64], padding="SAME")
-        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)        
+        U_mask = self.convolution(U_concat2, [1,1,1,128+32,64], padding="SAME")
+        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)
+        U_mask = self.convolution(U_mask, [3,3,3,64,64], padding="SAME")
+        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)
+        U_mask = self.convolution(U_mask, [3,3,3,64,64], padding="SAME")
+        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)
+        U_mask = self.convolution(U_mask, [1,1,1,64,64], padding="SAME")
+        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)
+        # reconstruction
+        #U_rec = self.convolution(U_mask, [1,1,1,64,64], padding="SAME")
+        #U_rec = tf.layers.batch_normalization(U_rec, training=bn_training)
+        #U_rec = self.convolution(U_rec, [1,1,1,64,1], padding="SAME", act=None)
+
+        # segmentation
+        global_info = self.convolution(D3, [1,1,1,512,32])
+        global_info = tf.tile(global_info, [1,32,32,32,1])
+        U_mask = tf.concat([U_mask, global_info], axis=-1)
+        U_mask = self.convolution(U_mask, [1,1,1,64+32,64], padding="SAME")
+        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)
         U_mask = self.convolution(U_mask, [1,1,1,64,n_seg], padding="SAME", act=None)
         U_class = tf.argmax(tf.nn.softmax(U_mask), axis=-1)
 
-        return A_fv, A_class, U_mask, U_class
+        return A_fv, A_class, U_mask, U_class#, U_rec
 
 
     def forward_propagation_best(self, X, n_cat, n_seg, keep_prob, bn_training):
@@ -351,6 +404,12 @@ class PartsNet():
         # weighted_entropy_seg = weights * weighted_entropy_seg
         # weighted_entropy_seg = (1.0 - 0.75*tf.pow(weights,3)) * weighted_entropy_seg
 
+        # reconstruction loss
+        #entropy_rec = tf.nn.sigmoid_cross_entropy_with_logits(labels=X, logits=U_rec)
+        #entropy_rec = tf.reduce_sum(entropy_rec, axis=-1)
+        #entropy_rec = tf.reduce_sum(entropy_rec, axis=-1)
+        #entropy_rec = tf.reduce_sum(entropy_rec, axis=-1)
+
         acc = tf.cast(tf.equal(tf.argmax(tf.nn.softmax(U), axis=-1, output_type=tf.int32), Y_seg), tf.float32) * Xrep
         print(acc)
         acc = tf.reduce_sum(acc, axis=-1)
@@ -367,7 +426,8 @@ class PartsNet():
         reg_loss = tf.reduce_sum(tf.losses.get_regularization_losses())
         seg_loss = tf.reduce_sum(weighted_entropy_seg)
         cat_loss = tf.reduce_sum(entropy_cat)
-        c = reg_loss + seg_loss + cat_loss #+ (tf.reduce_sum(weighted_entropy_seg1) + tf.reduce_sum(weighted_entropy_seg2)) * 0.01
+        #rec_loss = tf.reduce_sum(entropy_rec)
+        c = reg_loss + seg_loss + cat_loss# + rec_loss#+ (tf.reduce_sum(weighted_entropy_seg1) + tf.reduce_sum(weighted_entropy_seg2)) * 0.01
 
         return c, acc
 
@@ -421,13 +481,14 @@ class PartsNet():
                 # deconvolved_images,d_cost = sess.run([U_class,cost], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: 1.0})
                 deconvolved_images,d_cost,pred_class,seg_vec,feat_vec = sess.run([U_class,cost,A_class,U_vec,U_mask], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: wgs})
 
-                # for j in range(0, seg_vec.shape[0]):
-                #     mask = np.zeros(n_seg)
-                #     cat_dir = Parts.Labels[str(pred_class[j])]
-                #     s = Parts.Labels[cat_dir][Parts.PART_START]
-                #     e = s + Parts.Labels[cat_dir][Parts.PART_COUNT]
-                #     mask[s:e] = 1.0
-                #     deconvolved_images[j] = np.argmax(seg_vec[j] * mask, axis=-1)
+                # mask based on class prediction
+                for j in range(0, seg_vec.shape[0]):
+                    mask = np.zeros(n_seg)
+                    cat_dir = Parts.Labels[str(pred_class[j])]
+                    s = Parts.Labels[cat_dir][Parts.PART_START]
+                    e = s + Parts.Labels[cat_dir][Parts.PART_COUNT]
+                    mask[s:e] = 1.0
+                    deconvolved_images[j] = np.argmax(seg_vec[j] * mask, axis=-1)
 
                 xresh = np.reshape(occ, [-1, occ.shape[1], occ.shape[2], occ.shape[3]])
                 a = 1.0 - (np.sum((xresh * deconvolved_images) != seg)) / np.sum(xresh)
@@ -471,12 +532,23 @@ class PartsNet():
                 costs = []
                 train_accuracies = []
                 dev_accuracies = []
+                test_accuracies = []
                 wious = []
                 wious_dev = []
+                wious_test = []
                 train_times = []
                 wupdate_times = []
                 train_infer_time = []
                 dev_infer_time = []
+                test_infer_time = []
+
+                out_header = "Training times/epoch (ms), Weight update time/epoch (ms)"
+                if dataset_template.NUMBER_BATCHES in self.dataset.train:
+                    out_header += ",Train accuracy,Train weighted average IOU,Train inference times (ms)"
+                if dataset_template.NUMBER_BATCHES in self.dataset.dev:
+                    out_header += ",Dev accuracy,Dev weighted average IOU,Dev inference times (ms)"
+                if dataset_template.NUMBER_BATCHES in self.dataset.test:
+                    out_header += ",Test accuracy,Test weighted average IOU,Test inference times (ms)"
 
                 restarts = [True] * 100
                 for epoch in range(0, self.num_epochs):
@@ -490,7 +562,7 @@ class PartsNet():
                     for i in range(batches):
                         # train for other cases (the augmented ones)
                         if augment:
-                            for _ in range(0, 3):
+                            for _ in range(0, 1):
                                 occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train,augment=augment,update=False)
                                 wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
                                 wgs = 1.0 - wgs # best results should have least priority
@@ -511,15 +583,15 @@ class PartsNet():
                     self.dataset.restart_mini_batches(self.dataset.train)
                     stime = time.time()                    
                     batches = self.dataset.num_mini_batches(self.dataset.train)
-                    for i in range(batches):
-                        # occ,seg,cat,names,_,_ = self.dataset.next_mini_batch_augmented(self.dataset.train)
-                        occ,seg,cat,_,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train, update=False)
-                        out = sess.run([acc_op], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: 1, bn_training: False, weight: wgs})
-                        min_wgs = min(min_wgs, np.min(wgs))
-                        max_wgs = max(max_wgs, np.max(wgs))
-                        self.dataset.update_mini_batch(self.dataset.train, out[0])
-                        min_wgs = min(min_wgs, np.min(wgs))
-                        print("\rUpdate weights %05d/%d" % (i+1,batches),end="")
+                    # for i in range(batches):
+                    #     # occ,seg,cat,names,_,_ = self.dataset.next_mini_batch_augmented(self.dataset.train)
+                    #     occ,seg,cat,_,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train, update=False)
+                    #     out = sess.run([acc_op], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: 1, bn_training: False, weight: wgs})
+                    #     min_wgs = min(min_wgs, np.min(wgs))
+                    #     max_wgs = max(max_wgs, np.max(wgs))
+                    #     self.dataset.update_mini_batch(self.dataset.train, out[0])
+                    #     min_wgs = min(min_wgs, np.min(wgs))
+                    #     print("\rUpdate weights %05d/%d" % (i+1,batches),end="")
                     
                     writer.add_summary(summary, epoch)
                     cc = cc / (self.dataset.num_examples(self.dataset.train))
@@ -531,46 +603,45 @@ class PartsNet():
                     # save model
                     save_path = tf.train.Saver().save(sess, os.path.join(log_dir, self.name + str(epoch+1) + ".ckpt"))
                     print("Model saved in file: %s" % save_path)
+                        
                     # plt.figure(1)
                     plt.clf()
                     plt.plot(np.squeeze(np.array(costs)))
                     plt.savefig("./3d-object-recognition/ShapeNet/cost.png", format="png")
 
-                    acc, avg_time = accuracy_test(self.dataset, self.dataset.train)
-                    train_infer_time.append(avg_time)
-                    train_accuracies.append(acc)
-                    plt.clf()
-                    # plt.figure(2)
-                    plt.plot(np.squeeze(np.array(train_accuracies)))
-                    plt.savefig("./3d-object-recognition/ShapeNet/train_accuracies.png", format="png")
+                    # evaluation of existing sets
+                    def evaluate(data_dict, suffix, infer_time, accuracies, wious):
+                        acc, avg_time = accuracy_test(self.dataset, data_dict)
+                        infer_time.append(avg_time)
+                        accuracies.append(acc)
+                        plt.clf()
+                        # plt.figure(2)
+                        plt.plot(np.squeeze(np.array(accuracies)))
+                        plt.savefig("./3d-object-recognition/ShapeNet/accuracies" + suffix + ".png", format="png")
 
-                    weighted_average_iou, per_category_iou = self.evaluate_iou_results() # has to be after the accuracy_test, so it has saved and current values
-                    wious.append(weighted_average_iou)
-                    # plt.figure(3)
-                    plt.clf()
-                    plt.plot(np.squeeze(np.array(wious)))
-                    plt.savefig("./3d-object-recognition/ShapeNet/weighted_average_iou.png", format="png")
+                        weighted_average_iou, per_category_iou = self.evaluate_iou_results(data_dict) # has to be after the accuracy_test, so it has saved and current values
+                        wious.append(weighted_average_iou)
+                        # plt.figure(3)
+                        plt.clf()
+                        plt.plot(np.squeeze(np.array(wious)))
+                        plt.savefig("./3d-object-recognition/ShapeNet/weighted_average_iou" + suffix + ".png", format="png")
 
-                    # plt.figure(4)
-                    plt.clf()
-                    plt.barh(np.arange(n_cat),per_category_iou, tick_label=list(Parts.label_dict.keys()))
-                    # plt.barh(np.arange(n_cat),per_category_iou, tick_label=["airplane", "bag", "cap", "car", "chair", "earphone", "guitar", "knife", "lamp", "laptop", "motorbike", "mug", "pistol", "rocket", "skateboard", "table"])
-                    plt.savefig("./3d-object-recognition/ShapeNet/per_category_iou" + str(epoch+1) + ".png", format="png")
+                        # plt.figure(4)
+                        plt.clf()
+                        plt.barh(np.arange(n_cat),per_category_iou, tick_label=list(Parts.label_dict.keys()))
+                        # plt.barh(np.arange(n_cat),per_category_iou, tick_label=["airplane", "bag", "cap", "car", "chair", "earphone", "guitar", "knife", "lamp", "laptop", "motorbike", "mug", "pistol", "rocket", "skateboard", "table"])
+                        plt.savefig("./3d-object-recognition/ShapeNet/per_category_iou" + str(epoch+1) + suffix + ".png", format="png")
+
+
+                    if dataset_template.NUMBER_BATCHES in self.dataset.train:
+                        evaluate(self.dataset.train, "_train", train_infer_time, train_accuracies, wious)
+
+                    if dataset_template.NUMBER_BATCHES in self.dataset.dev:
+                        evaluate(self.dataset.dev, "_dev", dev_infer_time, dev_accuracies, wious_dev)
                     
-                    acc, avg_time = accuracy_test(self.dataset, self.dataset.dev, in_memory=in_memory)
-                    dev_infer_time.append(avg_time)
-                    dev_accuracies.append(acc)
-                    plt.clf()
-                    plt.plot(np.squeeze(np.array(dev_accuracies)))
-                    plt.savefig("./3d-object-recognition/ShapeNet/dev_accuracies.png", format="png")
+                    if dataset_template.NUMBER_BATCHES in self.dataset.test:
+                        evaluate(self.dataset.test, "_test", test_infer_time, test_accuracies, wious_test)
 
-                    weighted_average_iou, per_category_iou = self.evaluate_iou_results(self.dataset.dev, in_memory=in_memory)
-                    wious_dev.append(weighted_average_iou)
-                    # plt.figure(3)
-                    plt.clf()
-                    plt.plot(np.squeeze(np.array(wious_dev)))
-                    plt.savefig("./3d-object-recognition/ShapeNet/weighted_average_iou_dev.png", format="png")
-                    
                     print("")
                     # do check for file barrier, if so, break training cycle
                     if os.path.exists(os.path.join(log_dir, "barrier.txt")):
@@ -578,25 +649,37 @@ class PartsNet():
 
 
                 array2csv = []
-                array2csv.append(train_accuracies)
-                array2csv.append(dev_accuracies)
-                array2csv.append(wious)
-                array2csv.append(wious_dev)
                 array2csv.append(train_times)
                 array2csv.append(wupdate_times)
-                array2csv.append(train_infer_time)
-                array2csv.append(dev_infer_time)
+                if dataset_template.NUMBER_BATCHES in self.dataset.train:
+                    array2csv.append(train_infer_time)
+                    array2csv.append(train_accuracies)
+                    array2csv.append(wious)
+
+                if dataset_template.NUMBER_BATCHES in self.dataset.dev:
+                    array2csv.append(dev_infer_time)
+                    array2csv.append(dev_accuracies)
+                    array2csv.append(wious_dev)
+
+                if dataset_template.NUMBER_BATCHES in self.dataset.test:
+                    array2csv.append(test_infer_time)
+                    array2csv.append(test_accuracies)
+                    array2csv.append(wious_test)
+
                 array2csv = np.array(array2csv) # reshape so the values are in the rows
                 array2csv = array2csv.transpose()
-                np.savetxt("./3d-object-recognition/ShapeNet/Results/" + self.name + ".csv", array2csv, delimiter=",", comments='', header="Train accuracy,Dev accuracy,"\
-                "Train weighted average IOU,Dev weighted average IOU,Training times/epoch (ms), Weight update time/epoch (ms),"\
-                "Train inference times (ms),Dev inference times (ms)")
+                np.savetxt("./3d-object-recognition/ShapeNet/Results/" + self.name + ".csv", array2csv, delimiter=",", comments='', header=out_header)
                 shutil.copy("./3d-object-recognition/ShapeNet/network.json", "./3d-object-recognition/ShapeNet/Results/network.json")
                 print("Max wIOU train %f" % np.max(wious))
                 print("Max wIOU dev %f" % np.max(wious_dev))
+                print("Max wIOU test %f" % np.max(wious_test))
             else:
-                accuracy_test(self.dataset, self.dataset.dev, in_memory=in_memory)
-                self.evaluate_iou_results(self.dataset.dev, in_memory=in_memory)
+                if dataset_template.NUMBER_BATCHES in self.dataset.test:
+                    accuracy_test(self.dataset, self.dataset.test, in_memory=in_memory)
+                    self.evaluate_iou_results(self.dataset.test, in_memory=in_memory)
+                else:
+                    accuracy_test(self.dataset, self.dataset.dev, in_memory=in_memory)
+                    self.evaluate_iou_results(self.dataset.dev, in_memory=in_memory)
             #     print("Evaluate on train dataset")
             #     accuracy_test(self.dataset, self.dataset.train)
             #     self.evaluate_iou_results(self.dataset.train)
@@ -635,5 +718,6 @@ class PartsNet():
 
 if __name__ == "__main__":
     # s = PartsNet("ShapeNet", "./3d-object-recognition/UnityData")
-    s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData")
-    s.run_model(load=True, train=False,visualize=False, in_memory=True,interpolate=False,augment=True)
+    s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData/dataset")
+    s.run_model(load=False, train=True,visualize=False, in_memory=True,interpolate=False,augment=False)
+
