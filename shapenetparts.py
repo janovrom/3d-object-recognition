@@ -205,7 +205,7 @@ class Parts(dataset_template):
                 p = np.copy(data[4])
                 orig_shape = data[4].shape
                 p = np.reshape(p, [-1,3]).transpose()
-                # p = convert.rotatePoints(p, convert.eulerToMatrix((0,np.random.randint(0,360),0))) # random rotation
+                p = convert.rotatePoints(p, convert.eulerToMatrix((0,np.random.randint(0,360),0))) # random rotation
                 p = p.transpose()
                 p = p * (1.0 + scale_range * (np.array([np.random.randint(0,500),np.random.randint(0,500),np.random.randint(0,500)]) / 500.0 - 0.5) / 5.0) # random scale in range 1 +- scale_range*0.1
                 # p = p * ((np.random.rand() * 0.2 - 0.1) * per_point_noise_range + 1.0)
@@ -215,7 +215,34 @@ class Parts(dataset_template):
 
                 occ.append(np.reshape(occupancy_grid, self.shape))
                 seg.append(label_grid)
-                pts.append(p)                
+                pts.append(p)  
+
+                # xs = []
+                # ys = []
+                # zs = []
+                # vs = []
+
+                # for x in range(0, self.shape[0]):
+                #     for y in range(0, self.shape[1]):
+                #         for z in range(0, self.shape[2]):
+                #             if occ[-1][x,y,z] == 1:
+                #                 xs.append(x)
+                #                 ys.append(y)
+                #                 zs.append(z)
+                #                 vs.append(label_grid[x,y,z])
+
+
+                # fig = plt.figure()
+                # ax = fig.add_subplot(121, projection='3d')
+                # m = plt.get_cmap("Set1")
+                # ax.scatter(xs, ys, zs, c=vs, cmap=m, marker='p')
+                # ax.set_xlabel('X')
+                # ax.set_ylabel('Y')
+                # ax.set_zlabel('Z')
+                # ax.set_xlim(0,self.shape[0]-1)
+                # ax.set_ylim(0,self.shape[1]-1)
+                # ax.set_zlim(0,self.shape[2]-1)
+                # plt.show()              
             else:
                 occ.append(data[0])
                 seg.append(data[1])
@@ -318,10 +345,7 @@ class Parts(dataset_template):
             for y in range(0, self.shape[1]):
                 for z in range(0, self.shape[2]):
                     if occupancy[x,y,z] == 1:
-                        # red for miss
-                        # orange for miss with category miss
                         # green for correct
-                        # yellow for correct with category miss
                         xs.append(x)
                         ys.append(y)
                         zs.append(z)

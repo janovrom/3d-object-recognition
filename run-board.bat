@@ -1,1 +1,1 @@
-tensorboard --logdir=.\3d-object-recognition\ShapeNet
+tensorboard --logdir=.\ShapeNet
