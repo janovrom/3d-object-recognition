@@ -70,17 +70,17 @@ class PartsNet():
         # IN 32
         # first block
         A0 = self.block(X, 1, 32, keep_prob, bn_training)     
-        M0 = self.convolution(A0, [2,2,2,32,64], strides=[1,2,2,2,1], padding="VALID", act=tf.nn.leaky_relu)     
+        M0 = self.convolution(A0, [2,2,2,32,64], strides=[1,2,2,2,1], padding="VALID", act=tf.nn.relu)     
         # M0 = tf.nn.max_pool3d(A0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 16
 
         # second block
         A1 = self.block(M0, 64, 64, keep_prob, bn_training)  
-        M1 = self.convolution(A1, [2,2,2,64,128], strides=[1,2,2,2,1], padding="VALID", act=tf.nn.leaky_relu)   
+        M1 = self.convolution(A1, [2,2,2,64,128], strides=[1,2,2,2,1], padding="VALID", act=tf.nn.relu)   
         # M1 = tf.nn.max_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8
 
         # third block
         A2 = self.block(M1, 128, 128, keep_prob, bn_training) 
-        M2 = self.convolution(A2, [2,2,2,128,256], strides=[1,2,2,2,1], padding="VALID", act=tf.nn.leaky_relu)   
+        M2 = self.convolution(A2, [2,2,2,128,256], strides=[1,2,2,2,1], padding="VALID", act=tf.nn.relu)   
         # M2 = tf.nn.max_pool3d(A2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 4
 
         D3 = tf.contrib.layers.maxout(tf.reshape(M2, [-1,1,1,1,4*4*4*256]), 512, axis=-1)
@@ -88,37 +88,37 @@ class PartsNet():
         # up segmentation
         U_t = tf.tile(D3, [1,8,8,8,1])
         U_concat = tf.concat([A2, U_t], axis=-1)
-        U1 = self.convolution(U_concat, [3,3,3,512+128,256], padding="SAME", act=tf.nn.leaky_relu)
+        U1 = self.convolution(U_concat, [3,3,3,512+128,256], padding="SAME", act=tf.nn.softplus)
         U1 = tf.layers.batch_normalization(U1, training=bn_training)        
-        U1 = self.convolution(tf.concat([U1, M1], axis=-1), [3,3,3,256+128,256], padding="SAME", act=tf.nn.leaky_relu)
+        U1 = self.convolution(tf.concat([U1, M1], axis=-1), [3,3,3,256+128,256], padding="SAME", act=tf.nn.softplus)
         U1 = tf.layers.batch_normalization(U1, training=bn_training)    
         
         U2 = tf.keras.layers.UpSampling3D([2,2,2])(U1) # to 16
         U_concat1 = tf.concat([A1, U2], axis=-1)
-        U2 = self.convolution(U_concat1, [3,3,3,256+64,128], padding="SAME", act=tf.nn.leaky_relu)
+        U2 = self.convolution(U_concat1, [3,3,3,256+64,128], padding="SAME", act=tf.nn.softplus)
         U2 = tf.layers.batch_normalization(U2, training=bn_training)        
-        U2 = self.convolution(tf.concat([U2, M0], axis=-1), [3,3,3,128+64,128], padding="SAME", act=tf.nn.leaky_relu)
+        U2 = self.convolution(tf.concat([U2, M0], axis=-1), [3,3,3,128+64,128], padding="SAME", act=tf.nn.softplus)
         U2 = tf.layers.batch_normalization(U2, training=bn_training)  
 
         U3 = tf.keras.layers.UpSampling3D([2,2,2])(U2) # to 32
         U_concat2 = tf.concat([A0, U3], axis=-1)
-        U_mask = self.convolution(U_concat2, [3,3,3,128+32,64], padding="SAME", act=tf.nn.leaky_relu)
+        U_mask = self.convolution(U_concat2, [3,3,3,128+32,64], padding="SAME", act=tf.nn.softplus)
         U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)  
-        U_mask = self.convolution(tf.concat([U_mask, self.convolution(X, [3,3,3,1,16], padding="SAME")], axis=-1), [3,3,3,64+16,64], padding="SAME", act=tf.nn.leaky_relu)
+        U_mask = self.convolution(tf.concat([U_mask, self.convolution(X, [3,3,3,1,16], padding="SAME")], axis=-1), [3,3,3,64+16,64], padding="SAME", act=tf.nn.softplus)
         U_mask = tf.layers.batch_normalization(U_mask, training=bn_training) 
 
         # segmentation prediction      
         U_mask = self.convolution(U_mask, [1,1,1,64,n_seg], padding="SAME", act=None)
-        mask = self.convolution(D3, [1,1,1,512,256], padding="VALID", act=tf.nn.leaky_relu)
+        mask = self.convolution(D3, [1,1,1,512,256], padding="VALID", act=tf.nn.softplus)
         mask = tf.nn.dropout(mask, keep_prob)
         mask = tf.layers.batch_normalization(mask, training=bn_training)
-        mask = self.convolution(mask, [1,1,1,256,128], padding="VALID", act=tf.nn.leaky_relu)
+        mask = self.convolution(mask, [1,1,1,256,128], padding="VALID", act=tf.nn.softplus)
         mask = tf.nn.dropout(mask, keep_prob)
         mask = tf.layers.batch_normalization(mask, training=bn_training)
         mask = self.convolution(mask, [1,1,1,128,n_seg], padding="VALID", act=None)
         
         # category prediction
-        A4 = self.convolution(D3, [1,1,1,512,256], padding="VALID", act=tf.nn.leaky_relu)
+        A4 = self.convolution(D3, [1,1,1,512,256], padding="VALID", act=tf.nn.softplus)
         A4 = tf.nn.dropout(A4, keep_prob)
         A4 = tf.layers.batch_normalization(A4, training=bn_training)
         seg_sum = tf.reduce_sum(U_mask, axis=3)
@@ -126,7 +126,7 @@ class PartsNet():
         seg_sum = tf.reduce_sum(seg_sum, axis=1)
         print(seg_sum.shape)
         seg_sum = tf.reshape(seg_sum, [-1,1,1,1,n_seg])
-        A_cat = self.convolution(tf.concat([A4,seg_sum], axis=-1), [1,1,1,256+n_seg,128], padding="VALID", act=tf.nn.leaky_relu)
+        A_cat = self.convolution(tf.concat([A4,seg_sum], axis=-1), [1,1,1,256+n_seg,128], padding="VALID", act=tf.nn.softplus)
         A_cat = tf.nn.dropout(A_cat, keep_prob)
         A_cat = tf.layers.batch_normalization(A_cat, training=bn_training)
         # A_cat = self.convolution(A4, [1,1,1,256,256], padding="VALID")
