@@ -590,28 +590,3 @@ def create_var_set(in_dir, out_dir, grid_size=32, normalize=False):
     p.map(partial(create_and_save_var, in_dir=in_dir, out_dir=out_dir, normalize=normalize, grid_size=grid_size), [f1,f2,f3,f4,f5,f6,f7,f8])
     p.close()
     p.join() 
-
-
-if __name__ == '__main__':
-    # convert_model_net("./3d-object-recognition/ModelNet-data/ModelNet10", "train", "./3d-object-recognition/ModelNet-data/data-out")
-    # convert_model_net("./3d-object-recognition/ModelNet-data/ModelNet10", "test", "./3d-object-recognition/ModelNet-data/data-out")
-
-    # create_segmentation_set("E:/janovrom/Engine/test-data-out", "./3d-object-recognition/Engine-data-32/test", grid_size=32)
-    # create_segmentation_set("E:/janovrom/Engine/train-data-out", "./3d-object-recognition/Engine-data-32/train", grid_size=32)
-    # create_segmentation_set("E:/janovrom/Engine/dev-data-out", "./3d-object-recognition/Engine-data-32/dev", grid_size=32)
-
-    # create_density_set("D:/janovrom/Data/test-data-out", "./3d-object-recognition/ModelNet-data-density/test", grid_size=32)
-    # create_density_set("D:/janovrom/Data/train-data-out", "./3d-object-recognition/ModelNet-data-density/train", grid_size=32)
-
-    # create_var_set("D:/janovrom/ModelNet/test-data-out", "./3d-object-recognition/ModelNet-data-var/test", grid_size=32, normalize=True)
-    # create_var_set("D:/janovrom/ModelNet/train-data-out", "./3d-object-recognition/ModelNet-data-var/train", grid_size=32, normalize=True)
-
-    # create_dataset()
-    # convert_scale_dataset("./3d-object-recognition/data-16/", "./3d-object-recognition/data-32-scaled-16/", 16, 32, "train")
-    # rename_set_files("./3d-object-recognition/data-32-plus-scaled/test", 0)
-    # convert_scaled_dataset_to_translation("./3d-object-recognition/data-16/", "./3d-object-recognition/data-32-scaled-16-translated/", 16, 32, "train")
-    # get_visible_set("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-seen/", 32, "test")
-
-    # get_visible_set_sparse("./3d-object-recognition/data-small/", "./3d-object-recognition/data-32-sparse-seen/", 32, "test", 5)
-    # sanity check on saved data
-    dl.load_xyzl("E:\\janovrom\\Python\\3d-object-recognition\\SegData\\gauc-0.xyzl")   
