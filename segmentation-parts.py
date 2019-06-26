@@ -14,20 +14,22 @@ class PartsNet():
 
     def create_placeholders(self, n_y, n_seg):
         X = tf.placeholder(dtype=tf.float32, shape=(None,self.dataset.shape[0],self.dataset.shape[1],self.dataset.shape[2],1), name="input_grid")
+        X_vol = tf.placeholder(dtype=tf.float32, shape=(None,self.dataset.shape[0],self.dataset.shape[1],self.dataset.shape[2],1), name="input_grid_vol")
         weight = tf.placeholder(dtype=tf.float32, shape=(None), name="loss_weights")
         Y_seg = tf.placeholder(dtype=tf.int32, shape=(None), name="segmentation_labels")
         Y_cat = tf.placeholder(dtype=tf.int32, shape=(None), name="category_labels")
         keep_prob = tf.placeholder(dtype=tf.float32, name="keep_probability")
         bn_training = tf.placeholder(dtype=tf.bool, name="batch_norm_training")
+        pos_mask =  tf.placeholder(dtype=tf.float32, shape=(None, n_seg), name="loss_weights")
 
-        return X, Y_seg, Y_cat, keep_prob, bn_training, weight
+        return X, Y_seg, Y_cat, keep_prob, bn_training, weight, pos_mask, X_vol
 
     
     def convolution(self, X, shape, strides=[1,1,1,1,1], padding="SAME", act=tf.nn.relu):
         # tf.contrib.layers.xavier_initializer(uniform=False)
-        W = tf.get_variable("weights" + str(self.layer_idx), shape, initializer=tf.variance_scaling_initializer(), dtype=tf.float32, regularizer=tf.contrib.layers.l2_regularizer(self.l2_reg_w))
+        W = tf.get_variable("weights" + str(self.layer_idx), shape, initializer=tf.variance_scaling_initializer(), dtype=tf.float32, regularizer=tf.contrib.layers.l2_regularizer(self.lr_dec))
         # T = tf.get_variable("biastransform" + str(self.layer_idx), [X.shape[1], X.shape[2], X.shape[3]], initializer=tf.variance_scaling_initializer(), dtype=tf.float32, regularizer=tf.contrib.layers.l2_regularizer(self.lr_dec))
-        b = tf.get_variable("biases" + str(self.layer_idx), shape[-1], initializer=tf.zeros_initializer(), dtype=tf.float32, regularizer=tf.contrib.layers.l2_regularizer(self.l2_reg_b))
+        b = tf.get_variable("biases" + str(self.layer_idx), shape[-1], initializer=tf.zeros_initializer(), dtype=tf.float32, regularizer=tf.contrib.layers.l2_regularizer(self.lr_dec))
         Z = tf.nn.conv3d(X, W, strides=strides, padding=padding) + b #T * b
 
         tf.summary.histogram("weights" + str(self.layer_idx), W)
@@ -40,160 +42,39 @@ class PartsNet():
         return Z
 
 
-    
-    def forward_propagation_great_small_but_efficient(self, X, n_cat, n_seg, keep_prob, bn_training):
-        self.layer_idx = 0
-        # imagine that the net operates over 32x32x32 blocks
-        # feature vector learning
-        # IN 32
-        # first block
-        A0_5 = self.convolution(X, [5,5,5,1,32], padding="SAME") 
-        D0_5 = tf.nn.dropout(A0_5, keep_prob)
-        D0_5 = tf.layers.batch_normalization(D0_5, training=bn_training) 
-
-        A0_3 = self.convolution(X, [3,3,3,1,32], padding="SAME") 
-        D0_3 = tf.nn.dropout(A0_3, keep_prob)
-        D0_3 = tf.layers.batch_normalization(D0_3, training=bn_training) 
-        A0 = tf.concat([D0_3,D0_5], axis=-1)     
-        M0 = tf.nn.max_pool3d(A0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 16
-
-        # second block
-        A1_5 = self.convolution(M0, [5,5,5,64,32], padding="SAME")
-        D1_5 = tf.nn.dropout(A1_5, keep_prob)        
-        D1_5 = tf.layers.batch_normalization(D1_5, training=bn_training) 
-
-        A1_3 = self.convolution(M0, [3,3,3,64,32], padding="SAME")
-        D1_3 = tf.nn.dropout(A1_3, keep_prob)        
-        D1_3 = tf.layers.batch_normalization(D1_3, training=bn_training)      
-        A1 = tf.concat([D1_3,D1_5], axis=-1)     
-        M1 = tf.nn.max_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8
-
-        # third block
-        A2_5 = self.convolution(M1, [5,5,5,64,32], padding="SAME")
-        D2_5 = tf.nn.dropout(A2_5, keep_prob)        
-        D2_5 = tf.layers.batch_normalization(D2_5, training=bn_training) 
-
-        A2_3 = self.convolution(M1, [3,3,3,64,32], padding="SAME")
-        D2_3 = tf.nn.dropout(A2_3, keep_prob)        
-        D2_3 = tf.layers.batch_normalization(D2_3, training=bn_training)      
-        A2 = tf.concat([D2_3,D2_5], axis=-1)     
-        M2 = tf.nn.max_pool3d(A2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 4
-
-        A3 = self.convolution(M2, [4,4,4,64,128], padding="VALID") # to 1
-        D3 = tf.nn.dropout(A3, keep_prob)
-        D3 = tf.layers.batch_normalization(D3, training=bn_training)        
-        
-        # TODO try and remove the 3,3,3 conv and use reshape instead to large vector
-        A4 = self.convolution(D3, [1,1,1,128,256], padding="VALID")
-        A5 = self.convolution(A4, [1,1,1,256,256], padding="VALID")
-        A_cat = self.convolution(A5, [1,1,1,256,n_cat], padding="VALID", act=None)
-        A_fv = tf.reshape(A_cat, [-1, n_cat])
-        A_class = tf.argmax(tf.nn.softmax(A_fv), axis=-1)
-        print(A_class.shape)
-
-        # U0 = self.convolution(A4, [1,1,1,512,256], padding="VALID") #1x1x1x256
-        # TODO use A5 as input or A_cat
-        U_t = tf.tile(D3, [1,8,8,8,1])
-        U_concat = tf.concat([A2, U_t], axis=-1)
-        U1 = self.convolution(U_concat, [3,3,3,128+64,128], padding="SAME")
-        U1 = tf.layers.batch_normalization(U1, training=bn_training)        
-        U1 = self.convolution(U1, [3,3,3,128,128], padding="SAME")
-        U1 = tf.layers.batch_normalization(U1, training=bn_training)        
-        
-        U2 = tf.keras.layers.UpSampling3D([2,2,2])(U1) # to 16
-        U_concat1 = tf.concat([A1, U2], axis=-1)
-        U2 = self.convolution(U_concat1, [3,3,3,128+64,64], padding="SAME")
-        U2 = tf.layers.batch_normalization(U2, training=bn_training)        
-        U2 = self.convolution(U2, [3,3,3,64,64], padding="SAME",act=tf.nn.elu)
-        U2 = tf.layers.batch_normalization(U2, training=bn_training)        
-
-        U3 = tf.keras.layers.UpSampling3D([2,2,2])(U2) # to 32
-        U_concat2 = tf.concat([A0, U3], axis=-1)
-        U_mask = self.convolution(U_concat2, [3,3,3,64+64,64], padding="SAME")
-        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)        
-        U_mask = self.convolution(U_mask, [1,1,1,64,n_seg], padding="SAME", act=None)
-        U_class = tf.argmax(tf.nn.softmax(U_mask), axis=-1)
-
-        return A_fv, A_class, U_mask, U_class
-
-
-    def forward_propagation3(self, X, n_cat, n_seg, keep_prob, bn_training):
-        self.layer_idx = 0
-        # imagine that the net operates over 32x32x32 blocks
-        # feature vector learning
-        # IN 32
-        A0 = self.convolution(X, [5,5,5,1,32], padding="SAME") 
-        D0 = tf.nn.dropout(A0, keep_prob)
-        D0 = tf.layers.batch_normalization(D0, training=bn_training)        
-
-        M0 = tf.nn.max_pool3d(D0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 16
-        A1 = self.convolution(M0, [5,5,5,32,64], padding="SAME")
-        D1 = tf.nn.dropout(A1, keep_prob)        
-        D1 = tf.layers.batch_normalization(D1, training=bn_training)        
-
-        M1 = tf.nn.max_pool3d(D1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8
-        A2_1 = self.convolution(M1, [3,3,3,64,128], padding="SAME") # to 8
-        A2 = self.convolution(A2_1, [3,3,3,128,128], padding="VALID") # to 6
-        D2 = tf.nn.dropout(A2, keep_prob)
-        D2 = tf.layers.batch_normalization(D2, training=bn_training)        
-        
-        M2 = tf.nn.max_pool3d(D2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 3
-        A3 = self.convolution(M2, [3,3,3,128,256], padding="VALID") #1x1x1x256
-        A4 = self.convolution(A3, [1,1,1,256,512], padding="VALID") #1x1x1x256
-        A5 = self.convolution(A4, [1,1,1,512,256], padding="VALID")
-        A_cat = self.convolution(A5, [1,1,1,256,n_cat], padding="VALID", act=None)
-        A_fv = tf.reshape(A_cat, [-1, n_cat])
-        A_class = tf.argmax(tf.nn.softmax(A_fv), axis=-1)
-        print(A_class.shape)
-
-        # U0 = self.convolution(A4, [1,1,1,512,256], padding="VALID") #1x1x1x256
-
-        U_t = tf.tile(A4, [1,8,8,8,1])
-        U_concat = tf.concat([A2_1, U_t], axis=-1)
-        U1 = self.convolution(U_concat, [3,3,3,640,512], padding="SAME")
-        U1 = tf.layers.batch_normalization(U1, training=bn_training)        
-        U1 = self.convolution(U1, [3,3,3,512,256], padding="SAME")
-        U1 = tf.layers.batch_normalization(U1, training=bn_training)        
-        
-        U2 = tf.keras.layers.UpSampling3D([2,2,2])(U1) # to 16
-        U_concat1 = tf.concat([D1, U2], axis=-1)
-        U2 = self.convolution(U_concat1, [3,3,3,320,256], padding="SAME")
-        U2 = tf.layers.batch_normalization(U2, training=bn_training)        
-        U2 = self.convolution(U2, [3,3,3,256,128], padding="SAME")
-        U2 = tf.layers.batch_normalization(U2, training=bn_training)        
-
-        U3 = tf.keras.layers.UpSampling3D([2,2,2])(U2) # to 32
-        U_concat2 = tf.concat([D0, U3], axis=-1)
-        U_mask = self.convolution(U_concat2, [3,3,3,160,256], padding="SAME")
-        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)        
-        U_mask = self.convolution(U_mask, [1,1,1,256,128], padding="SAME")
-        U_mask = self.convolution(U_mask, [1,1,1,128,n_seg], padding="SAME", act=None)
-        U_class = tf.argmax(tf.nn.softmax(U_mask), axis=-1)
-
-        return A_fv, A_class, U_mask, U_class
-
-
     def tensor_shape(self, tensor):
         return [-1, tensor.shape[1], tensor.shape[2], tensor.shape[3], tensor.shape[4]]
 
 
     def block(self, X, in_size, out_size, keep_prob, bn_training, s3=3, s5=5):
-        A0_5 = self.convolution(X, [s5,s5,s5,in_size,out_size], padding="SAME") 
-        D0_5 = tf.nn.dropout(A0_5, keep_prob)
-        D0_5 = tf.layers.batch_normalization(D0_5, training=bn_training) 
+        # A0_5 = self.convolution(X, [s5,s5,s5,in_size,out_size], padding="SAME") 
+        # D0_5 = tf.nn.dropout(A0_5, keep_prob)
+        # D0_5 = tf.layers.batch_normalization(D0_5, training=bn_training) 
 
-        A0_3 = self.convolution(X, [s3,s3,s3,in_size,out_size], padding="SAME") 
-        D0_3 = tf.nn.dropout(A0_3, keep_prob)
-        D0_3 = tf.layers.batch_normalization(D0_3, training=bn_training) 
-        A0 = tf.concat([D0_3,D0_5], axis=-1)
+        # A0_3 = self.convolution(X, [s3,s3,s3,in_size,out_size], padding="SAME") 
+        # D0_3 = tf.nn.dropout(A0_3, keep_prob)
+        # D0_3 = tf.layers.batch_normalization(D0_3, training=bn_training)
 
-        A0 = self.convolution(A0, [1,1,1,out_size*2, out_size*2], padding="SAME")    
+        # A0_3 = self.convolution(D0_3, [s3,s3,s3,out_size,out_size], padding="SAME") 
+        # D0_3 = tf.nn.dropout(A0_3, keep_prob)
+        # D0_3 = tf.layers.batch_normalization(D0_3, training=bn_training)
+
+        # A0_3 = self.convolution(D0_3, [s3,s3,s3,out_size,out_size], padding="SAME") 
+        # D0_3 = tf.nn.dropout(A0_3, keep_prob)
+        # D0_3 = tf.layers.batch_normalization(D0_3, training=bn_training)
+
+        A0_2 = self.convolution(X, [s3,s3,s3,in_size,out_size], padding="SAME", act=tf.nn.leaky_relu) 
+        D0_2 = tf.nn.dropout(A0_2, keep_prob)
+        D0_2 = tf.layers.batch_normalization(D0_2, training=bn_training)
+
+        A0_2 = self.convolution(D0_2, [s3,s3,s3,out_size,out_size], padding="SAME", act=tf.nn.leaky_relu) 
+        D0_2 = tf.nn.dropout(A0_2, keep_prob)
+        D0_2 = tf.layers.batch_normalization(D0_2, training=bn_training)
+
+        A0 = self.convolution(D0_2, [s3,s3,s3,out_size,out_size], padding="SAME", act=tf.nn.leaky_relu) 
         A0 = tf.nn.dropout(A0, keep_prob)
         A0 = tf.layers.batch_normalization(A0, training=bn_training)
-
-        A0 = self.convolution(A0, [1,1,1,out_size*2, out_size*2], padding="SAME")    
-        A0 = tf.nn.dropout(A0, keep_prob)
-        A0 = tf.layers.batch_normalization(A0, training=bn_training)    
+        A0 = tf.contrib.layers.maxout(A0, out_size, axis=-1)
 
         return A0
 
@@ -231,30 +112,79 @@ class PartsNet():
         return Z
 
 
-    def forward_propagation(self, X, n_cat, n_seg, keep_prob, bn_training):
-        self.layer_idx = 0
-        # imagine that the net operates over 32x32x32 blocks
-        # feature vector learning
-        # IN 32
-        # first block
-        A0 = self.block(X, 1, 16, keep_prob, bn_training)
-        M0 = self.convolution(A0, [2,2,2,32,32],strides=[1,2,2,2,1],padding="VALID") # seems reasonable well
-        # M0 = tf.nn.max_pool3d(A0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 16
+    def dense_block(self, X, keep_prob, bn_training, in_size, out_size):
+        A1 = self.convolution(X, [3,1,1,in_size,8], padding="SAME")
+        A2 = self.convolution(X, [1,3,1,in_size,8], padding="SAME")
+        A3 = self.convolution(X, [1,1,3,in_size,8], padding="SAME")
 
-        # second block
-        A1 = self.block(M0, 32, 32, keep_prob, bn_training)
-        M1 = self.convolution(A1, [2,2,2,64,64],strides=[1,2,2,2,1],padding="VALID")
-        # M1 = tf.nn.max_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8
+        # second layer - 2d grids
+        A11 = self.convolution(A1, [3,1,1,8,8], padding="SAME")
+        A12 = self.convolution(A1, [1,3,1,8,8], padding="SAME")
+        A13 = self.convolution(A1, [1,1,3,8,8], padding="SAME")
+        A21 = self.convolution(A2, [3,1,1,8,8], padding="SAME")
+        A22 = self.convolution(A2, [1,3,1,8,8], padding="SAME")
+        A23 = self.convolution(A2, [1,1,3,8,8], padding="SAME")
+        A31 = self.convolution(A3, [3,1,1,8,8], padding="SAME")
+        A32 = self.convolution(A3, [1,3,1,8,8], padding="SAME")
+        A33 = self.convolution(A3, [1,1,3,8,8], padding="SAME")
 
-        # third block
-        A2 = self.block(M1, 64, 64, keep_prob, bn_training)
-        M2 = self.convolution(A2, [2,2,2,128,128],strides=[1,2,2,2,1],padding="VALID")    
-        # M2 = tf.nn.max_pool3d(A2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 4
-
-        A3 = self.convolution(M2, [4,4,4,128,512], padding="VALID") # to 1
-        D3 = tf.nn.dropout(A3, keep_prob)
-        D3 = tf.layers.batch_normalization(D3, training=bn_training)        
+        # third layer - 3d grids
+        A111 = self.convolution(A11, [3,1,1,8,8], padding="SAME")
+        A112 = self.convolution(A11, [1,3,1,8,8], padding="SAME")
+        A113 = self.convolution(A11, [1,1,3,8,8], padding="SAME")
+        A121 = self.convolution(A12, [3,1,1,8,8], padding="SAME")
+        A122 = self.convolution(A12, [1,3,1,8,8], padding="SAME")
+        A123 = self.convolution(A12, [1,1,3,8,8], padding="SAME")
+        A131 = self.convolution(A13, [3,1,1,8,8], padding="SAME")
+        A132 = self.convolution(A13, [1,3,1,8,8], padding="SAME")
+        A133 = self.convolution(A13, [1,1,3,8,8], padding="SAME")
         
+        A211 = self.convolution(A21, [3,1,1,8,8], padding="SAME")
+        A212 = self.convolution(A21, [1,3,1,8,8], padding="SAME")
+        A213 = self.convolution(A21, [1,1,3,8,8], padding="SAME")
+        A221 = self.convolution(A22, [3,1,1,8,8], padding="SAME")
+        A222 = self.convolution(A22, [1,3,1,8,8], padding="SAME")
+        A223 = self.convolution(A22, [1,1,3,8,8], padding="SAME")
+        A231 = self.convolution(A23, [3,1,1,8,8], padding="SAME")
+        A232 = self.convolution(A23, [1,3,1,8,8], padding="SAME")
+        A233 = self.convolution(A23, [1,1,3,8,8], padding="SAME")
+
+        A311 = self.convolution(A31, [3,1,1,8,8], padding="SAME")
+        A312 = self.convolution(A31, [1,3,1,8,8], padding="SAME")
+        A313 = self.convolution(A31, [1,1,3,8,8], padding="SAME")
+        A321 = self.convolution(A32, [3,1,1,8,8], padding="SAME")
+        A322 = self.convolution(A32, [1,3,1,8,8], padding="SAME")
+        A323 = self.convolution(A32, [1,1,3,8,8], padding="SAME")
+        A331 = self.convolution(A33, [3,1,1,8,8], padding="SAME")
+        A332 = self.convolution(A33, [1,3,1,8,8], padding="SAME")
+        A333 = self.convolution(A33, [1,1,3,8,8], padding="SAME")
+
+        A = tf.concat([A111,A112,A113,A121,A122,A123,A131,A132,A133,A211,A212,A213,A221,A222,A223,A231,A232,A233,A311,A312,A313,A321,A322,A323,A331,A332,A333], axis=-1)
+        A = self.convolution(A, [1,1,1,27*8,out_size], padding="SAME")
+        A = tf.nn.dropout(A, keep_prob)
+        A = tf.layers.batch_normalization(A, training=bn_training)
+
+        return A
+
+
+    def forward_propagation_too_bad(self, X, n_cat, n_seg, keep_prob, bn_training):
+        self.layer_idx = 0
+        C1 = self.dense_block(X, keep_prob, bn_training, 1, 32) 
+        C1 = self.dense_block(C1, keep_prob, bn_training, 32, 32) 
+        M1 = self.convolution(C1, [2,2,2,32,32],strides=[1,2,2,2,1],padding="VALID") # to 16
+        
+        C2 = self.dense_block(M1, keep_prob, bn_training, 32, 64) 
+        C2 = self.dense_block(C2, keep_prob, bn_training, 64, 64) 
+        M2 = self.convolution(C2, [2,2,2,64,64],strides=[1,2,2,2,1],padding="VALID") # to 8
+        
+        C3 = self.dense_block(M2, keep_prob, bn_training, 64, 128)  
+        C3 = self.dense_block(C3, keep_prob, bn_training, 128, 128)  
+        M3 = self.convolution(C3, [2,2,2,128,128],strides=[1,2,2,2,1],padding="VALID") # to 4
+
+        A3 = self.convolution(M3, [4,4,4,128,512], padding="VALID") # to 1
+        D3 = tf.nn.dropout(A3, keep_prob)
+        D3 = tf.layers.batch_normalization(D3, training=bn_training)
+
         A4 = self.convolution(D3, [1,1,1,512,256], padding="VALID")
         A_cat = self.convolution(A4, [1,1,1,256,n_cat], padding="VALID", act=None)
         A_fv = tf.reshape(A_cat, [-1, n_cat])
@@ -262,56 +192,119 @@ class PartsNet():
         print(A_class.shape)
 
         U_t = tf.tile(D3, [1,8,8,8,1])
+        U_concat = tf.concat([C3, U_t], axis=-1)
+        U1 = self.convolution(U_concat, [1,1,1,512+128,256], padding="SAME")# dimension reduction
+        U1 = tf.nn.dropout(U1, keep_prob)
+        U1 = tf.layers.batch_normalization(U1, training=bn_training) 
+        U1 = self.dense_block(U1, keep_prob, bn_training, 256, 256)
+        U1 = self.dense_block(U1, keep_prob, bn_training, 256, 128)
+        
+        U2 = tf.keras.layers.UpSampling3D([2,2,2])(U1) # to 16
+        U_concat1 = tf.concat([C2, U2], axis=-1)
+        U2 = self.convolution(U_concat1, [1,1,1,128+64,128], padding="SAME") # dimension reduction
+        U2 = tf.nn.dropout(U2, keep_prob)
+        U2 = tf.layers.batch_normalization(U2, training=bn_training) 
+        U2 = self.dense_block(U2, keep_prob, bn_training, 128, 128)        
+        U2 = self.dense_block(U2, keep_prob, bn_training, 128, 64)        
+
+        U3 = tf.keras.layers.UpSampling3D([2,2,2])(U2) # to 32
+        U_concat2 = tf.concat([C1, U3], axis=-1)
+        U_mask = self.convolution(U_concat2, [1,1,1,64+32,64], padding="SAME") # dimension reduction
+        U_mask = tf.nn.dropout(U_mask, keep_prob)
+        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training) 
+        U_mask = self.dense_block(U_mask, keep_prob, bn_training, 64, 64) 
+        U_mask = self.dense_block(U_mask, keep_prob, bn_training, 64, 64) 
+
+        # segmentation
+        U_mask = self.convolution(U_mask, [1,1,1,64,n_seg], padding="SAME", act=None)
+        U_mask = tf.nn.dropout(U_mask, keep_prob)
+        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training) 
+        U_class = tf.argmax(tf.nn.softmax(U_mask), axis=-1)
+
+        return A_fv, A_class, U_mask, U_class
+
+    
+    def forward_propagation(self, X, n_cat, n_seg, keep_prob, bn_training):
+        self.layer_idx = 0
+        # imagine that the net operates over 32x32x32 blocks
+        # feature vector learning
+        # IN 32
+        # first block
+        A0 = self.block(X, 1, 32, keep_prob, bn_training)     
+        M0 = self.convolution(A0, [2,2,2,32,64], strides=[1,2,2,2,1], padding="VALID", act=tf.nn.leaky_relu)     
+        # M0 = tf.nn.max_pool3d(A0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 16
+
+        # second block
+        A1 = self.block(M0, 64, 64, keep_prob, bn_training)  
+        M1 = self.convolution(A1, [2,2,2,64,128], strides=[1,2,2,2,1], padding="VALID", act=tf.nn.leaky_relu)   
+        # M1 = tf.nn.max_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8
+
+        # third block
+        A2 = self.block(M1, 128, 128, keep_prob, bn_training) 
+        M2 = self.convolution(A2, [2,2,2,128,256], strides=[1,2,2,2,1], padding="VALID", act=tf.nn.leaky_relu)   
+        # M2 = tf.nn.max_pool3d(A2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 4
+
+        # A3 = self.convolution(M2, [4,4,4,256,512], padding="VALID") # to 1
+        D3 = tf.contrib.layers.maxout(tf.reshape(M2, [-1,1,1,1,4*4*4*256]), 512, axis=-1)
+        # A3 = tf.nn.max_pool3d(M2, ksize=[1,2,2,2,1],strides=[1,2,2,2,1], padding="VALID") # to 2
+        # D3 = self.convolution(tf.reshape(A3, [-1,1,1,1,256*8]), [1,1,1,256*8,512])
+        # D3 = tf.nn.dropout(A3, keep_prob)
+        # D3 = tf.layers.batch_normalization(D3, training=bn_training)        
+
+        # up segmentation
+        U_t = tf.tile(D3, [1,8,8,8,1])
         U_concat = tf.concat([A2, U_t], axis=-1)
-        U1 = self.convolution(U_concat, [1,1,1,512+128,256], padding="SAME")
+        U1 = self.convolution(U_concat, [3,3,3,512+128,256], padding="SAME", act=tf.nn.leaky_relu)
         U1 = tf.layers.batch_normalization(U1, training=bn_training)        
-        U1 = self.convolution(U1, [3,3,3,256,256], padding="SAME")
-        U1 = tf.layers.batch_normalization(U1, training=bn_training)  
-        U1 = self.convolution(U1, [1,1,1,256,256], padding="SAME")
-        U1 = tf.layers.batch_normalization(U1, training=bn_training) 
-        U1 = self.convolution(U1, [3,3,3,256,256], padding="SAME")
-        U1 = tf.layers.batch_normalization(U1, training=bn_training) 
-        U1 = self.convolution(U1, [1,1,1,256,256], padding="SAME")
-        U1 = tf.layers.batch_normalization(U1, training=bn_training)     
+        U1 = self.convolution(tf.concat([U1, M1], axis=-1), [3,3,3,256+128,256], padding="SAME", act=tf.nn.leaky_relu)
+        U1 = tf.layers.batch_normalization(U1, training=bn_training)    
         
         U2 = tf.keras.layers.UpSampling3D([2,2,2])(U1) # to 16
         U_concat1 = tf.concat([A1, U2], axis=-1)
-        U2 = self.convolution(U_concat1, [1,1,1,256+64,128], padding="SAME")
+        U2 = self.convolution(U_concat1, [3,3,3,256+64,128], padding="SAME", act=tf.nn.leaky_relu)
         U2 = tf.layers.batch_normalization(U2, training=bn_training)        
-        U2 = self.convolution(U2, [3,3,3,128,128], padding="SAME")
-        U2 = tf.layers.batch_normalization(U2, training=bn_training)        
-        U2 = self.convolution(U2, [1,1,1,128,128], padding="SAME")
+        U2 = self.convolution(tf.concat([U2, M0], axis=-1), [3,3,3,128+64,128], padding="SAME", act=tf.nn.leaky_relu)
         U2 = tf.layers.batch_normalization(U2, training=bn_training)  
-        U2 = self.convolution(U2, [3,3,3,128,128], padding="SAME")
-        U2 = tf.layers.batch_normalization(U2, training=bn_training)  
-        U2 = self.convolution(U2, [1,1,1,128,128], padding="SAME")
-        U2 = tf.layers.batch_normalization(U2, training=bn_training)        
 
         U3 = tf.keras.layers.UpSampling3D([2,2,2])(U2) # to 32
         U_concat2 = tf.concat([A0, U3], axis=-1)
-        U_mask = self.convolution(U_concat2, [1,1,1,128+32,64], padding="SAME")
-        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)
-        U_mask = self.convolution(U_mask, [3,3,3,64,64], padding="SAME")
-        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)
-        U_mask = self.convolution(U_mask, [3,3,3,64,64], padding="SAME")
-        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)
-        U_mask = self.convolution(U_mask, [1,1,1,64,64], padding="SAME")
-        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)
-        # reconstruction
-        #U_rec = self.convolution(U_mask, [1,1,1,64,64], padding="SAME")
-        #U_rec = tf.layers.batch_normalization(U_rec, training=bn_training)
-        #U_rec = self.convolution(U_rec, [1,1,1,64,1], padding="SAME", act=None)
+        U_mask = self.convolution(U_concat2, [3,3,3,128+32,64], padding="SAME", act=tf.nn.leaky_relu)
+        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)  
+        U_mask = self.convolution(tf.concat([U_mask, self.convolution(X, [3,3,3,1,16], padding="SAME")], axis=-1), [3,3,3,64+16,64], padding="SAME", act=tf.nn.leaky_relu)
+        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training) 
 
-        # segmentation
-        global_info = self.convolution(D3, [1,1,1,512,32])
-        global_info = tf.tile(global_info, [1,32,32,32,1])
-        U_mask = tf.concat([U_mask, global_info], axis=-1)
-        U_mask = self.convolution(U_mask, [1,1,1,64+32,64], padding="SAME")
-        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)
+        # segmentation prediction      
         U_mask = self.convolution(U_mask, [1,1,1,64,n_seg], padding="SAME", act=None)
+        mask = self.convolution(D3, [1,1,1,512,256], padding="VALID", act=tf.nn.leaky_relu)
+        mask = tf.nn.dropout(mask, keep_prob)
+        mask = tf.layers.batch_normalization(mask, training=bn_training)
+        mask = self.convolution(mask, [1,1,1,256,128], padding="VALID", act=tf.nn.leaky_relu)
+        mask = tf.nn.dropout(mask, keep_prob)
+        mask = tf.layers.batch_normalization(mask, training=bn_training)
+        mask = self.convolution(mask, [1,1,1,128,n_seg], padding="VALID", act=None)
+        
+        # category prediction
+        A4 = self.convolution(D3, [1,1,1,512,256], padding="VALID", act=tf.nn.leaky_relu)
+        A4 = tf.nn.dropout(A4, keep_prob)
+        A4 = tf.layers.batch_normalization(A4, training=bn_training)
+        seg_sum = tf.reduce_sum(U_mask, axis=3)
+        seg_sum = tf.reduce_sum(seg_sum, axis=2)
+        seg_sum = tf.reduce_sum(seg_sum, axis=1)
+        print(seg_sum.shape)
+        seg_sum = tf.reshape(seg_sum, [-1,1,1,1,n_seg])
+        A_cat = self.convolution(tf.concat([A4,seg_sum], axis=-1), [1,1,1,256+n_seg,128], padding="VALID", act=tf.nn.leaky_relu)
+        A_cat = tf.nn.dropout(A_cat, keep_prob)
+        A_cat = tf.layers.batch_normalization(A_cat, training=bn_training)
+        # A_cat = self.convolution(A4, [1,1,1,256,256], padding="VALID")
+        A_cat = self.convolution(A_cat, [1,1,1,128,n_cat], padding="VALID", act=None)
+        A_fv = tf.reshape(A_cat, [-1, n_cat])
+        A_class = tf.argmax(tf.nn.softmax(A_fv), axis=-1)
+        print(A_class.shape)
+
+        # U_mask = U_mask * tf.nn.sigmoid(mask)
         U_class = tf.argmax(tf.nn.softmax(U_mask), axis=-1)
 
-        return A_fv, A_class, U_mask, U_class#, U_rec
+        return A_fv, A_class, U_mask, U_class, tf.reshape(mask, [-1,n_seg])
 
 
     def forward_propagation_best(self, X, n_cat, n_seg, keep_prob, bn_training):
@@ -367,7 +360,7 @@ class PartsNet():
         # TODO use A5 as input or A_cat
         U_t = tf.tile(D3, [1,8,8,8,1])
         U_concat = tf.concat([A2, U_t], axis=-1)
-        U1 = self.convolution(U_concat, [1,1,1,512+256,256], padding="SAME")
+        U1 = self.convolution(U_concat, [3,3,3,512+256,256], padding="SAME")
         U1 = tf.layers.batch_normalization(U1, training=bn_training)        
         U1 = self.convolution(U1, [3,3,3,256,256], padding="SAME")
         U1 = tf.layers.batch_normalization(U1, training=bn_training)        
@@ -382,35 +375,37 @@ class PartsNet():
         U3 = tf.keras.layers.UpSampling3D([2,2,2])(U2) # to 32
         U_concat2 = tf.concat([A0, U3], axis=-1)
         U_mask = self.convolution(U_concat2, [3,3,3,128+64,64], padding="SAME")
-        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)        
+        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)      
+        U_mask = self.convolution(U_mask, [3,3,3,64,64], padding="SAME")
+        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)   
         U_mask = self.convolution(U_mask, [1,1,1,64,n_seg], padding="SAME", act=None)
         U_class = tf.argmax(tf.nn.softmax(U_mask), axis=-1)
 
         return A_fv, A_class, U_mask, U_class
 
 
-    def compute_cost(self, U, Y_seg, X, A, Y_cat, n_seg, weights):
-        U = U * X 
+    def compute_cost(self, U, Y_seg, X, A, Y_cat, n_seg, weights, pos_mask, res_mask):
+        U = U * X
+        # U_mask1 = U_mask1 * X
+        # U_mask2 = U_mask2 * X
+        # U_mask3 = U_mask3 * X
+        
+        soft_U = tf.nn.softmax(U)
         Xrep = tf.reshape(X, [-1, X.shape[1], X.shape[2], X.shape[3]])
         entropy_cat = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=Y_cat, logits=A) # used
         weighted_entropy_seg = tf.nn.softmax_cross_entropy_with_logits(labels=tf.one_hot(Y_seg, n_seg) * X, logits=U) * Xrep
+        # weight it by prediction 
+        # weighted_entropy_seg = weighted_entropy_seg * (2 - tf.reduce_max(tf.one_hot(Y_seg, n_seg) * soft_U, axis=-1))
         # weighted_entropy_seg = tf.losses.softmax_cross_entropy(onehot_labels=tf.one_hot(Y_seg, n_seg) * X, logits=U, weights=(1 - 0.75*tf.pow(weights,8)))
         print(weighted_entropy_seg)
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
         weighted_entropy_seg = tf.reduce_sum(weighted_entropy_seg, axis=-1)
         weighted_entropy_seg = weighted_entropy_seg
-        # weighted_entropy_seg = (1.0 - 0.95*tf.pow(weights,3)) * weighted_entropy_seg
-        # weighted_entropy_seg = weights * weighted_entropy_seg
-        # weighted_entropy_seg = (1.0 - 0.75*tf.pow(weights,3)) * weighted_entropy_seg
+        
+        mask_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=pos_mask, logits=res_mask)
 
-        # reconstruction loss
-        #entropy_rec = tf.nn.sigmoid_cross_entropy_with_logits(labels=X, logits=U_rec)
-        #entropy_rec = tf.reduce_sum(entropy_rec, axis=-1)
-        #entropy_rec = tf.reduce_sum(entropy_rec, axis=-1)
-        #entropy_rec = tf.reduce_sum(entropy_rec, axis=-1)
-
-        acc = tf.cast(tf.equal(tf.argmax(tf.nn.softmax(U), axis=-1, output_type=tf.int32), Y_seg), tf.float32) * Xrep
+        acc = tf.cast(tf.equal(tf.argmax(soft_U, axis=-1, output_type=tf.int32), Y_seg), tf.float32) * Xrep
         print(acc)
         acc = tf.reduce_sum(acc, axis=-1)
         acc = tf.reduce_sum(acc, axis=-1)
@@ -421,20 +416,17 @@ class PartsNet():
 
         acc = acc / xsum
 
-        # weighted_entropy_seg1 = tf.nn.softmax_cross_entropy_with_logits(labels=tf.one_hot(Y_seg, n_seg) * X, logits=U_mask1 * X)
-        # weighted_entropy_seg2 = tf.nn.softmax_cross_entropy_with_logits(labels=tf.one_hot(Y_seg, n_seg) * X, logits=U_mask2 * X)
         reg_loss = tf.reduce_sum(tf.losses.get_regularization_losses())
         seg_loss = tf.reduce_sum(weighted_entropy_seg)
         cat_loss = tf.reduce_sum(entropy_cat)
-        #rec_loss = tf.reduce_sum(entropy_rec)
-        c = reg_loss + seg_loss + cat_loss# + rec_loss#+ (tf.reduce_sum(weighted_entropy_seg1) + tf.reduce_sum(weighted_entropy_seg2)) * 0.01
-
+        mask_loss = tf.reduce_sum(mask_entropy)
+        c = reg_loss + seg_loss + cat_loss + mask_loss
         return c, acc
 
 
 
-    def run_model(self, load=False, train=True,visualize=True, in_memory=True, interpolate=True, augment=True):
-        log_dir = os.path.join("./3d-object-recognition", self.name)
+    def run_model(self, load=False, train=True,visualize=True, in_memory=True, interpolate=True, augment=True, save_train=False, save_dev=False, apply_mask=False):
+        log_dir = os.path.join("", self.name)
         tf.reset_default_graph()
         n_cat = self.dataset.num_classes
         n_seg = self.dataset.num_classes_parts
@@ -443,12 +435,12 @@ class PartsNet():
         # get variables and placeholders
         step = tf.Variable(0, trainable=False, name="global_step")
         self.lr_dec = tf.maximum(1e-5, tf.train.exponential_decay(self.lr, step, self.decay_step, self.decay_rate, staircase=True))
-        X, Y_seg, Y_cat, keep_prob, bn_training, weight = self.create_placeholders(n_cat, n_seg)
+        X, Y_seg, Y_cat, keep_prob, bn_training, weight, pos_mask, X_vol = self.create_placeholders(n_cat, n_seg)
         
         # get model
-        A_fv, A_class, U_mask, U_class = self.forward_propagation(X, n_cat, n_seg, keep_prob, bn_training)
+        A_fv, A_class, U_mask, U_class, res_mask = self.forward_propagation(X_vol, n_cat, n_seg, keep_prob, bn_training)
         U_vec = tf.nn.softmax(U_mask)
-        cost,acc_op = self.compute_cost(U_mask, Y_seg, X, A_fv, Y_cat, n_seg, weight)
+        cost,acc_op = self.compute_cost(U_mask, Y_seg, X, A_fv, Y_cat, n_seg, weight, pos_mask, res_mask)
 
         # declare optimizations
         optimizer = tf.train.AdamOptimizer(learning_rate=self.lr_dec)
@@ -477,18 +469,19 @@ class PartsNet():
             dataset.clear_segmentation(data_dict, in_memory=in_memory)
             for i in range(dataset.num_mini_batches(data_dict)):
                 stime = time.time()
-                occ,seg,cat,names,points,lbs,wgs = self.dataset.next_mini_batch(data_dict)
+                occ,seg,cat,names,points,lbs,wgs,msk,pos_msk,vol = self.dataset.next_mini_batch(data_dict)
                 # deconvolved_images,d_cost = sess.run([U_class,cost], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: 1.0})
-                deconvolved_images,d_cost,pred_class,seg_vec,feat_vec = sess.run([U_class,cost,A_class,U_vec,U_mask], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: wgs})
+                deconvolved_images,d_cost,pred_class,seg_vec,feat_vec = sess.run([U_class,cost,A_class,U_vec,U_mask], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: wgs, pos_mask: msk, X_vol: vol})
 
                 # mask based on class prediction
-                for j in range(0, seg_vec.shape[0]):
-                    mask = np.zeros(n_seg)
-                    cat_dir = Parts.Labels[str(pred_class[j])]
-                    s = Parts.Labels[cat_dir][Parts.PART_START]
-                    e = s + Parts.Labels[cat_dir][Parts.PART_COUNT]
-                    mask[s:e] = 1.0
-                    deconvolved_images[j] = np.argmax(seg_vec[j] * mask, axis=-1)
+                if apply_mask:
+                    for j in range(0, seg_vec.shape[0]):
+                        mask = np.zeros(n_seg)
+                        cat_dir = Parts.Labels[str(pred_class[j])]
+                        s = Parts.Labels[cat_dir][Parts.PART_START]
+                        e = s + Parts.Labels[cat_dir][Parts.PART_COUNT]
+                        mask[s:e] = 1.0
+                        deconvolved_images[j] = np.argmax(seg_vec[j] * mask, axis=-1)
 
                 xresh = np.reshape(occ, [-1, occ.shape[1], occ.shape[2], occ.shape[3]])
                 a = 1.0 - (np.sum((xresh * deconvolved_images) != seg)) / np.sum(xresh)
@@ -502,6 +495,7 @@ class PartsNet():
                     if interpolate:
                         dataset.save_segmentation(lbs[j], seg_vec[j], names[j], points[j], data_dict, in_memory=in_memory, interpolate=interpolate)
                     else:
+                        # dataset.save_segmentation(lbs[j], seg[j], names[j], points[j], data_dict, in_memory=in_memory, interpolate=interpolate)
                         dataset.save_segmentation(lbs[j], deconvolved_images[j], names[j], points[j], data_dict, in_memory=in_memory, interpolate=interpolate)
  
                 if visualize:
@@ -543,9 +537,9 @@ class PartsNet():
                 test_infer_time = []
 
                 out_header = "Training times/epoch (ms), Weight update time/epoch (ms)"
-                if dataset_template.NUMBER_BATCHES in self.dataset.train:
+                if save_train and dataset_template.NUMBER_BATCHES in self.dataset.train:
                     out_header += ",Train accuracy,Train weighted average IOU,Train inference times (ms)"
-                if dataset_template.NUMBER_BATCHES in self.dataset.dev:
+                if save_dev and dataset_template.NUMBER_BATCHES in self.dataset.dev:
                     out_header += ",Dev accuracy,Dev weighted average IOU,Dev inference times (ms)"
                 if dataset_template.NUMBER_BATCHES in self.dataset.test:
                     out_header += ",Test accuracy,Test weighted average IOU,Test inference times (ms)"
@@ -561,19 +555,19 @@ class PartsNet():
                     stime = time.time()
                     for i in range(batches):
                         # train for other cases (the augmented ones)
-                        if augment:
-                            for _ in range(0, 1):
-                                occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train,augment=augment,update=False)
-                                wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
-                                wgs = 1.0 - wgs # best results should have least priority
-                                summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs})
-                                cc = cc + d_cost
+                        # if augment:
+                        #     for _ in range(0, 1):
+                        #         occ,seg,cat,names,_,_,wgs,msk,pos_msk = self.dataset.next_mini_batch(self.dataset.train,augment=augment,update=False)
+                        #         wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
+                        #         wgs = 1.0 - wgs # best results should have least priority
+                        #         summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs})
+                        #         cc = cc + d_cost
 
                         # always train on unscaled data
-                        occ,seg,cat,names,_,_,wgs = self.dataset.next_mini_batch(self.dataset.train)
+                        occ,seg,cat,names,_,_,wgs,msk,pos_msk,vol = self.dataset.next_mini_batch(self.dataset.train,augment=augment)
                         wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
                         wgs = 1.0 - wgs # best results should have least priority
-                        summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs})
+                        summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs, pos_mask: msk, X_vol: vol})
                         cc = cc + d_cost
                         print("\rBatch learning %05d/%d" % (i+1,batches),end="")
 
@@ -607,7 +601,7 @@ class PartsNet():
                     # plt.figure(1)
                     plt.clf()
                     plt.plot(np.squeeze(np.array(costs)))
-                    plt.savefig("./3d-object-recognition/ShapeNet/cost.png", format="png")
+                    plt.savefig("./ShapeNet/cost.png", format="png")
 
                     # evaluation of existing sets
                     def evaluate(data_dict, suffix, infer_time, accuracies, wious):
@@ -617,30 +611,37 @@ class PartsNet():
                         plt.clf()
                         # plt.figure(2)
                         plt.plot(np.squeeze(np.array(accuracies)))
-                        plt.savefig("./3d-object-recognition/ShapeNet/accuracies" + suffix + ".png", format="png")
+                        plt.savefig("./ShapeNet/accuracies" + suffix + ".png", format="png")
 
                         weighted_average_iou, per_category_iou = self.evaluate_iou_results(data_dict) # has to be after the accuracy_test, so it has saved and current values
                         wious.append(weighted_average_iou)
                         # plt.figure(3)
                         plt.clf()
                         plt.plot(np.squeeze(np.array(wious)))
-                        plt.savefig("./3d-object-recognition/ShapeNet/weighted_average_iou" + suffix + ".png", format="png")
+                        plt.savefig("./ShapeNet/weighted_average_iou" + suffix + ".png", format="png")
 
                         # plt.figure(4)
                         plt.clf()
                         plt.barh(np.arange(n_cat),per_category_iou, tick_label=list(Parts.label_dict.keys()))
                         # plt.barh(np.arange(n_cat),per_category_iou, tick_label=["airplane", "bag", "cap", "car", "chair", "earphone", "guitar", "knife", "lamp", "laptop", "motorbike", "mug", "pistol", "rocket", "skateboard", "table"])
-                        plt.savefig("./3d-object-recognition/ShapeNet/per_category_iou" + str(epoch+1) + suffix + ".png", format="png")
+                        plt.savefig("./ShapeNet/per_category_iou" + str(epoch+1) + suffix + ".png", format="png")
 
 
-                    if dataset_template.NUMBER_BATCHES in self.dataset.train:
+                    if save_train and dataset_template.NUMBER_BATCHES in self.dataset.train:
                         evaluate(self.dataset.train, "_train", train_infer_time, train_accuracies, wious)
 
-                    if dataset_template.NUMBER_BATCHES in self.dataset.dev:
+                    if save_dev and dataset_template.NUMBER_BATCHES in self.dataset.dev:
                         evaluate(self.dataset.dev, "_dev", dev_infer_time, dev_accuracies, wious_dev)
                     
                     if dataset_template.NUMBER_BATCHES in self.dataset.test:
                         evaluate(self.dataset.test, "_test", test_infer_time, test_accuracies, wious_test)
+
+                    if save_train:
+                        print("Max wIOU train %f" % np.max(wious))
+                    if save_dev:
+                        print("Max wIOU dev %f" % np.max(wious_dev))
+                    
+                    print("Max wIOU test %f" % np.max(wious_test))
 
                     print("")
                     # do check for file barrier, if so, break training cycle
@@ -651,28 +652,28 @@ class PartsNet():
                 array2csv = []
                 array2csv.append(train_times)
                 array2csv.append(wupdate_times)
-                if dataset_template.NUMBER_BATCHES in self.dataset.train:
-                    array2csv.append(train_infer_time)
+                if save_train and dataset_template.NUMBER_BATCHES in self.dataset.train:
                     array2csv.append(train_accuracies)
                     array2csv.append(wious)
+                    array2csv.append(train_infer_time)
 
-                if dataset_template.NUMBER_BATCHES in self.dataset.dev:
-                    array2csv.append(dev_infer_time)
+                if save_dev and dataset_template.NUMBER_BATCHES in self.dataset.dev:
                     array2csv.append(dev_accuracies)
                     array2csv.append(wious_dev)
+                    array2csv.append(dev_infer_time)
 
                 if dataset_template.NUMBER_BATCHES in self.dataset.test:
-                    array2csv.append(test_infer_time)
                     array2csv.append(test_accuracies)
                     array2csv.append(wious_test)
+                    array2csv.append(test_infer_time)
 
                 array2csv = np.array(array2csv) # reshape so the values are in the rows
                 array2csv = array2csv.transpose()
-                np.savetxt("./3d-object-recognition/ShapeNet/Results/" + self.name + ".csv", array2csv, delimiter=",", comments='', header=out_header)
-                shutil.copy("./3d-object-recognition/ShapeNet/network.json", "./3d-object-recognition/ShapeNet/Results/network.json")
-                print("Max wIOU train %f" % np.max(wious))
-                print("Max wIOU dev %f" % np.max(wious_dev))
-                print("Max wIOU test %f" % np.max(wious_test))
+                np.savetxt("./ShapeNet/Results/" + self.name + ".csv", array2csv, delimiter=",", comments='', header=out_header)
+                shutil.copy("./ShapeNet/network.json", "./ShapeNet/Results/network.json")
+                shutil.copy("./segmentation-parts.py", "./" + self.name + "/Results/segmentation-parts.py")
+                shutil.copy("./shapenetparts.py", "./" + self.name + "/Results/shapenetparts.py")
+                
             else:
                 if dataset_template.NUMBER_BATCHES in self.dataset.test:
                     accuracy_test(self.dataset, self.dataset.test, in_memory=in_memory)
@@ -699,9 +700,9 @@ class PartsNet():
 
 
     def __init__(self, model_name, datapath):
-        assert os.path.exists(os.path.join("./3d-object-recognition", model_name, "network.json"))
+        assert os.path.exists(os.path.join(".", model_name, "network.json"))
 
-        with open(os.path.join("./3d-object-recognition", model_name, "network.json"), "r") as f:
+        with open(os.path.join(".", model_name, "network.json"), "r") as f:
             jparams = json.load(f)["params"]
             self.name =         model_name
             self.lr =           jparams["learning_rate"]
@@ -718,6 +719,6 @@ class PartsNet():
 
 if __name__ == "__main__":
     # s = PartsNet("ShapeNet", "./3d-object-recognition/UnityData")
-    s = PartsNet("ShapeNet", "./3d-object-recognition/ShapePartsData/dataset")
-    s.run_model(load=False, train=True,visualize=False, in_memory=True,interpolate=False,augment=False)
+    s = PartsNet("ShapeNet", "./ShapePartsData/dataset")
+    s.run_model(load=False, train=True,visualize=False, in_memory=True,interpolate=False,augment=True, apply_mask=False)
 

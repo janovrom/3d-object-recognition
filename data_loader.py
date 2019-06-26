@@ -815,7 +815,50 @@ def load_binvox_np(pointcloud, labels, grid_size=32, visualize=False):
         ax.set_zlabel('Z Label')
         plt.show()
 
-    return occupancy_grid, label_grid, 0, pointcloud, labels
+    # vol_occ = np.copy(occupancy_grid)
+    # for x in range(0, grid_size):
+    #     for z in range(0, grid_size):
+    #         y = 0
+    #         val = 0.25
+    #         while y < grid_size:
+    #             if occupancy_grid[x,y,z] == 1:
+    #                 val *= -1
+    #             else:
+    #                 vol_occ[x,y,z] += val
+
+    #             y += 1
+
+    # for x in range(0, grid_size):
+    #     for y in range(0, grid_size):
+    #         z = 0
+    #         val = 0.25
+    #         while z < grid_size:
+    #             if occupancy_grid[x,y,z] == 1:
+    #                 val *= -1
+    #             else:
+    #                 vol_occ[x,y,z] += val
+                    
+    #             z += 1
+
+    # for y in range(0, grid_size):
+    #     for z in range(0, grid_size):
+    #         x = 0
+    #         val = 0.25
+    #         while x < grid_size:
+    #             if occupancy_grid[x,y,z] == 1:
+    #                 val *= -1
+    #             else:
+    #                 vol_occ[x,y,z] += val
+                    
+    #             x += 1
+
+    vol_occ = np.copy(occupancy_grid)
+    # lspace = np.arange(-15.5,16,1)
+    # xx,yy,zz = np.meshgrid(lspace,lspace,lspace)
+    # vol_occ = np.sqrt(np.square(xx) + np.square(yy) + np.square(zz)) / np.sqrt(3)
+    # vol_occ[occupancy_grid == 1] = 1
+
+    return occupancy_grid, label_grid, 0, pointcloud, labels, vol_occ
 
 
 def load_binvox(pts, sgs, grid_size=32, ogrid_size=32, label_start=0, visualize=False):
@@ -958,7 +1001,50 @@ def load_binvox(pts, sgs, grid_size=32, ogrid_size=32, label_start=0, visualize=
         ax2.set_zlabel('Z Label')
         plt.show()
 
-    return occupancy_grid, label_grid, label_count, pointcloud, labels
+    # vol_occ = np.copy(occupancy_grid)
+    # for x in range(0, grid_size):
+    #     for z in range(0, grid_size):
+    #         y = 0
+    #         val = 0.25
+    #         while y < grid_size:
+    #             if occupancy_grid[x,y,z] == 1:
+    #                 val *= -1
+    #             else:
+    #                 vol_occ[x,y,z] += val
+
+    #             y += 1
+
+    # for x in range(0, grid_size):
+    #     for y in range(0, grid_size):
+    #         z = 0
+    #         val = 0.25
+    #         while z < grid_size:
+    #             if occupancy_grid[x,y,z] == 1:
+    #                 val *= -1
+    #             else:
+    #                 vol_occ[x,y,z] += val
+                    
+    #             z += 1
+
+    # for y in range(0, grid_size):
+    #     for z in range(0, grid_size):
+    #         x = 0
+    #         val = 0.25
+    #         while x < grid_size:
+    #             if occupancy_grid[x,y,z] == 1:
+    #                 val *= -1
+    #             else:
+    #                 vol_occ[x,y,z] += val
+                    
+    #             x += 1
+
+    vol_occ = np.copy(occupancy_grid)
+    # lspace = np.arange(-15.5,16,1)
+    # xx,yy,zz = np.meshgrid(lspace,lspace,lspace)
+    # vol_occ = np.sqrt(np.square(xx) + np.square(yy) + np.square(zz)) / np.sqrt(3)
+    # vol_occ[occupancy_grid == 1] = 1
+
+    return occupancy_grid, label_grid, label_count, pointcloud, labels, vol_occ
 
 
 def load_binvox_8_grid(pts, sgs, grid_size=32, ogrid_size=32, label_start=0, visualize=False):
@@ -1689,13 +1775,55 @@ if __name__ == "__main__":
 #     # gt_path =  "./tmp/012938.gt"
 #     # res_path = "./tmp/012938.res"
 #     # viz_points_segmentation(pts_path, gt_path, res_path)
-    path_pt =  ".\\3d-object-recognition\\ShapePartsData\\train\\train_data\\motorbike\\"
-    path_sg = ".\\3d-object-recognition\\ShapePartsData\\train\\train_label\\motorbike\\"
-    for pt_name,sg_name in zip(os.listdir(path_pt),os.listdir(path_sg)):
-        pf = os.path.join(path_pt, pt_name)
-        sf = os.path.join(path_sg, sg_name)
-        load_binvox(pf, sf, grid_size=32, label_start=0, visualize=True)
+    # path_pt =  ".\\3d-object-recognition\\ShapePartsData\\train\\train_data\\motorbike\\"
+    # path_sg = ".\\3d-object-recognition\\ShapePartsData\\train\\train_label\\motorbike\\"
+    # for pt_name,sg_name in zip(os.listdir(path_pt),os.listdir(path_sg)):
+    #     pf = os.path.join(path_pt, pt_name)
+    #     sf = os.path.join(path_sg, sg_name)
+    #     load_binvox(pf, sf, grid_size=32, label_start=0, visualize=True)
 
+    path_not_centered = "C:/Users/janovrom/Desktop/points_not_centered.xyz"
+    path_centered = "C:/Users/janovrom/Desktop/points_centered.xyz"
+    path_just_points1 = "C:/Users/janovrom/Desktop/points1.xyz"
+    path_just_points2 = "C:/Users/janovrom/Desktop/points2.xyz"
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    # m = plt.get_cmap("plasma")
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+    # ax.set_xlim(min_size,max_size)
+    # ax.set_ylim(min_size,max_size)
+    # ax.set_zlim(min_size,max_size)
+    plt.axis("equal")
+    for path,color in [[path_just_points1, "r"],[path_just_points2,"b"]]:
+        xs,ys,zs = load_xyz(path)
+        min_x = np.min(np.array(xs))
+        min_y = np.min(np.array(ys))
+        min_z = np.min(np.array(zs))
+        max_x = np.max(np.array(xs))
+        max_y = np.max(np.array(ys))
+        max_z = np.max(np.array(zs))
+        # Compute sizes 
+        size_x = max_x - min_x
+        size_y = max_y - min_y
+        size_z = max_z - min_z
+        max_size = np.max([max_x, max_y, max_z])
+        min_size = np.min([min_x, min_y, min_z])
+        print([min_x, min_y, min_z])
+        print([max_x, max_y, max_z])
+        # cx = (max_x - min_x) * 0.5 + min_x
+        # cy = (max_y - min_y) * 0.5 + min_y
+        # cz = (max_z - min_z) * 0.5 + min_z
+        cx = np.sum(np.array(xs)) / len(xs)
+        cy = np.sum(np.array(ys)) / len(ys)
+        cz = np.sum(np.array(zs)) / len(zs)
+        print("CENTER: " + str(cx) + "," + str(cy) + "," + str(cz))
+
+        ax.scatter(xs, ys, zs, c=color, marker='s')
+        # ax.scatter([128.5,125.4], [108,99.6], [234,233], c="b", marker="s")
+
+    plt.show()
     # for pts,seg in zip(os.listdir("./tmp/pts/"), os.listdir("./tmp/res/")):
     #     viz_points("./tmp/pts\\" + pts, "./tmp/res\\" + seg)#, out_dir="./tmp")
     

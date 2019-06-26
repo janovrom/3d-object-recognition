@@ -48,6 +48,7 @@ class Parts(dataset_template):
     }
     
     ORDER = "order"
+    AUGMENT = "augment"
     CATEGORY_NAME = "name"
     CATEGORY = "id"
     PART_COUNT = "part_count"
@@ -64,7 +65,7 @@ class Parts(dataset_template):
         if os.path.exists(path):
             data_dict[dataset_template.PATH] = path
             cat_idx = 0
-            num_parts = 0
+            num_parts = 0 # could make it 1
             data_dict[dataset_template.DATASET] = []
             data_dict[Parts.DATASET_DIRS] = []
             data_dict[Parts.DATASET_WEIGHTS] = []
@@ -92,11 +93,13 @@ class Parts(dataset_template):
                     lst_cat_labels = os.listdir(cat_labels)
                     for pts,lab in zip(lst_cat_files, lst_cat_labels):
                         print("\rLoading category %s: %d %%" % (cat_dir, int(iteration/len(lst_cat_files)*100)), end='', flush=True)
-                        occ,seg,part_count,cloud,labels = dl.load_binvox(os.path.join(cat_files,pts),os.path.join(cat_labels,lab),label_start=num_parts,grid_size=self.shape[0],ogrid_size=self.oshape[0])
+                        occ,seg,part_count,cloud,labels,vol_occ = dl.load_binvox(os.path.join(cat_files,pts),os.path.join(cat_labels,lab),label_start=num_parts,grid_size=self.shape[0],ogrid_size=self.oshape[0])
                         Parts.Labels[cat_dir][Parts.PART_COUNT] = max(Parts.Labels[cat_dir][Parts.PART_COUNT], part_count)
-                        data_dict[dataset_template.DATASET].append((np.reshape(occ, self.shape),seg,Parts.Labels[cat_dir][Parts.CATEGORY],cat_dir+"-"+pts,cloud,labels))
+                        existing_labels = np.unique(seg)
+                        data_dict[dataset_template.DATASET].append((np.reshape(occ, self.shape),seg,Parts.Labels[cat_dir][Parts.CATEGORY],cat_dir+"-"+pts,cloud,labels,existing_labels,vol_occ))
                         data_dict[Parts.DATASET_DIRS].append(cat_dir)
-                        data_dict[Parts.DATASET_WEIGHTS].append(Parts.label_weights[cat_dir])
+                        # data_dict[Parts.DATASET_WEIGHTS].append(Parts.label_weights[cat_dir])
+                        data_dict[Parts.DATASET_WEIGHTS].append(np.reshape(occ, self.shape))
                         iteration += 1
 
                     if iteration > 0:
@@ -151,36 +154,29 @@ class Parts(dataset_template):
     def restart_mini_batches(self, dataset, train=False):
         if train:
             order = []
+            augment = []
             iter_start = 0
-            idxs = np.random.permutation(dataset[Parts.NUM_LARGEST_CLASS])
             for key in Parts.label_dict.keys():
+                idxs = np.random.permutation(dataset[Parts.NUM_LARGEST_CLASS]) # test difference when here
                 idx = dataset[Parts.DATASET_DIRS] == key # get indices for this class
                 # get first element: starting index
                 start = np.nonzero(idx)[0][0]
                 count = np.sum(idx)
                 indices = np.mod(idxs, count) + start
                 order.append(indices)
+                augment.append(idxs > count)
 
             order = np.ravel(np.column_stack(order))
-            # for key in Parts.label_dict.keys():
-            #     idx = dataset[Parts.DATASET_DIRS] == key # get indices for this class
-            #     wgs = dataset[Parts.DATASET_WEIGHTS][idx] # get weights for class
-            #     data = dataset[dataset_template.DATASET][idx] # get data for class
-
-            #     sorted_idx = wgs.argsort() # get indices for sorted weights
-
-            #     dataset[Parts.DATASET_WEIGHTS][idx] = wgs[sorted_idx] # update
-            #     dataset[dataset_template.DATASET][idx] = data[sorted_idx] 
-            #     # create order for first num_smallest_class models with lowest weights
-            #     order.extend(np.arange(iter_start, iter_start+dataset[Parts.NUM_SMALLEST_CLASS]))
-            #     iter_start += dataset[Parts.NUM_SMALLEST_CLASS]
-
+            augment = np.ravel(np.column_stack(augment))
             dataset[Parts.ORDER] = np.array(order)
+            dataset[Parts.AUGMENT] = np.array(augment)
             # dataset[Parts.ORDER] = np.random.permutation(dataset[Parts.ORDER].shape[0])
             dataset[dataset_template.NUMBER_EXAMPLES] = dataset[Parts.ORDER].shape[0]
         else:
             dataset[dataset_template.NUMBER_EXAMPLES] = dataset[dataset_template.DATASET].shape[0]
             dataset[Parts.ORDER] = np.random.permutation(dataset[dataset_template.NUMBER_EXAMPLES])
+            dataset[Parts.AUGMENT] = np.zeros(dataset[dataset_template.NUMBER_EXAMPLES])
+            
 
         dataset[dataset_template.NUMBER_BATCHES] = int(dataset[dataset_template.NUMBER_EXAMPLES] / self.batch_size) + (0 if dataset[dataset_template.NUMBER_EXAMPLES] % self.batch_size == 0 else 1)
         dataset[dataset_template.CURRENT_BATCH] = 0
@@ -194,28 +190,30 @@ class Parts(dataset_template):
         pts = []
         lbs = []
         acc = []
+        msk = []
+        pos_msk = []
+        vol = []
         start = dataset[dataset_template.CURRENT_BATCH] * self.batch_size
         end = min(dataset[dataset_template.NUMBER_EXAMPLES], start + self.batch_size)
 
-        for data_idx in dataset[Parts.ORDER][start:end]:
+        for data_idx, aug in zip(dataset[Parts.ORDER][start:end], dataset[Parts.AUGMENT][start:end]):
             data = dataset[dataset_template.DATASET][data_idx]
-            if augment:
-                scale_range = 1.0
-                per_point_noise_range = 0.0
+            if augment and aug > 0:
+                scale_range = 3.0
                 p = np.copy(data[4])
                 orig_shape = data[4].shape
-                p = np.reshape(p, [-1,3]).transpose()
-                p = convert.rotatePoints(p, convert.eulerToMatrix((0,np.random.randint(0,360),0))) # random rotation
-                p = p.transpose()
+                p = np.reshape(p, [-1,3])
                 p = p * (1.0 + scale_range * (np.array([np.random.randint(0,500),np.random.randint(0,500),np.random.randint(0,500)]) / 500.0 - 0.5) / 5.0) # random scale in range 1 +- scale_range*0.1
-                # p = p * ((np.random.rand() * 0.2 - 0.1) * per_point_noise_range + 1.0)
-                # p = p.transpose()
+                p = p.transpose()
+                p = convert.rotatePoints(p, convert.eulerToMatrix((np.random.randint(-20,20),np.random.randint(-20,20),np.random.randint(-20,20)))) # random rotation
+                p = p.transpose()
                 p = np.reshape(p, orig_shape)
-                occupancy_grid,label_grid,_,_,_ = dl.load_binvox_np(p, data[5])
+                occupancy_grid,label_grid,_,_,_,vol_occ = dl.load_binvox_np(p, data[5])
 
                 occ.append(np.reshape(occupancy_grid, self.shape))
                 seg.append(label_grid)
                 pts.append(p)  
+                vol.append(np.reshape(vol_occ, self.shape))
 
                 # xs = []
                 # ys = []
@@ -247,16 +245,25 @@ class Parts(dataset_template):
                 occ.append(data[0])
                 seg.append(data[1])
                 pts.append(data[4])
+                vol.append(np.reshape(data[7], self.shape))
 
             cat.append(data[2])
             nam.append(data[3])
             lbs.append(data[5])
             acc.append(dataset[Parts.DATASET_WEIGHTS][data_idx])
+            mask = np.zeros(self.num_classes_parts)
+            mask[data[6]] = 1.0
+            pos_mask = np.zeros(self.num_classes_parts)
+            s = Parts.Labels[dataset[Parts.DATASET_DIRS][data_idx]][Parts.PART_START]
+            e = s + Parts.Labels[dataset[Parts.DATASET_DIRS][data_idx]][Parts.PART_COUNT]
+            pos_mask[s:e] = 1.0
+            msk.append(mask)
+            pos_msk.append(pos_mask)
 
         if update:
             dataset[dataset_template.CURRENT_BATCH] += 1
 
-        return np.array(occ),np.array(seg),np.array(cat),np.array(nam),np.array(pts),np.array(lbs),np.array(acc)
+        return np.array(occ),np.array(seg),np.array(cat),np.array(nam),np.array(pts),np.array(lbs),np.array(acc), np.array(msk), np.array(pos_msk), np.array(vol)
 
 
     def update_mini_batch(self, dataset, new_accs, alpha=0.05):
@@ -300,11 +307,10 @@ class Parts(dataset_template):
                 p = np.copy(data[4])
                 orig_shape = data[4].shape
                 p = np.reshape(p, [3,-1])
-                p = convert.rotatePoints(p, convert.eulerToMatrix((0,np.random.randint(0,360),0))) # random rotation
-                p = p.transpose()
-                p = p * (1.0 + scale_range * (np.array([np.random.randint(0,500),np.random.randint(0,500),np.random.randint(0,500)]) / 500.0 - 0.5) / 5.0) # random scale in range 1 +- scale_range*0.1
-                p = p * ((np.random.rand() * 0.2 - 0.1) * per_point_noise_range + 1.0)
-                p = p.transpose()
+                p = convert.rotatePoints(p, convert.eulerToMatrix((np.random.randint(0,360),np.random.randint(0,360),np.random.randint(0,360)))) # random rotation
+                # p = p.transpose()
+                # p = p * (1.0 + scale_range * (np.array([np.random.randint(0,500),np.random.randint(0,500),np.random.randint(0,500)]) / 500.0 - 0.5) / 5.0) # random scale in range 1 +- scale_range*0.1
+                # p = p.transpose()
                 p = np.reshape(p, orig_shape)
                 occupancy_grid, label_grid, _, _, _ = dl.load_binvox_np(p, data[5])
 
@@ -576,7 +582,7 @@ class Parts(dataset_template):
         print("Weighted average IOU is %f" % iou_weighted_ave)
 
         # save another statistics
-        np.savetxt("./3d-object-recognition/ShapeNet/misses.csv", misses, delimiter=",", comments='', header=",".join(part_category))
+        np.savetxt("./ShapeNet/misses_" + data_dict["name"] + ".csv", misses, delimiter=",", comments='', header=",".join(part_category))
 
         return iou_weighted_ave,iou_all
 
@@ -648,6 +654,6 @@ class Parts(dataset_template):
         return iou_weighted_ave,iou_all
 
 
-# if __name__ == "__main__":
-#     dataset = Parts("./3d-object-recognition/UnityData", load=False)
-#     dataset.evaluate_iou_results(dataset.train)
+if __name__ == "__main__":
+    dataset = Parts("./UnityData", load=False)
+    dataset.evaluate_iou_results(dataset.train)
