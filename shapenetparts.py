@@ -60,6 +60,7 @@ class Parts(dataset_template):
     DATASET_DIRS = "DATASET_DIRS"
     DATASET_WEIGHTS = "DATASET_WEIGHTS"
     Labels = {}
+    
 
     def __load_dataset(self, path, data_dict, load):
         if os.path.exists(path):
@@ -93,10 +94,10 @@ class Parts(dataset_template):
                     lst_cat_labels = os.listdir(cat_labels)
                     for pts,lab in zip(lst_cat_files, lst_cat_labels):
                         print("\rLoading category %s: %d %%" % (cat_dir, int(iteration/len(lst_cat_files)*100)), end='', flush=True)
-                        occ,seg,part_count,cloud,labels,vol_occ = dl.load_binvox(os.path.join(cat_files,pts),os.path.join(cat_labels,lab),label_start=num_parts,grid_size=self.shape[0],ogrid_size=self.oshape[0])
+                        occ,seg,part_count,cloud,labels,vol_occ,sizes = dl.load_binvox(os.path.join(cat_files,pts),os.path.join(cat_labels,lab),label_start=num_parts,grid_size=self.shape[0],ogrid_size=self.oshape[0])
                         Parts.Labels[cat_dir][Parts.PART_COUNT] = max(Parts.Labels[cat_dir][Parts.PART_COUNT], part_count)
                         existing_labels = np.unique(seg)
-                        data_dict[dataset_template.DATASET].append((np.reshape(occ, self.shape),seg,Parts.Labels[cat_dir][Parts.CATEGORY],cat_dir+"-"+pts,cloud,labels,existing_labels,vol_occ))
+                        data_dict[dataset_template.DATASET].append((np.reshape(occ, self.shape),seg,Parts.Labels[cat_dir][Parts.CATEGORY],cat_dir+"-"+pts,cloud,labels,existing_labels,vol_occ,sizes))
                         data_dict[Parts.DATASET_DIRS].append(cat_dir)
                         # data_dict[Parts.DATASET_WEIGHTS].append(Parts.label_weights[cat_dir])
                         data_dict[Parts.DATASET_WEIGHTS].append(np.reshape(occ, self.shape))
@@ -193,6 +194,7 @@ class Parts(dataset_template):
         msk = []
         pos_msk = []
         vol = []
+        siz = []
         start = dataset[dataset_template.CURRENT_BATCH] * self.batch_size
         end = min(dataset[dataset_template.NUMBER_EXAMPLES], start + self.batch_size)
 
@@ -208,12 +210,13 @@ class Parts(dataset_template):
                 p = convert.rotatePoints(p, convert.eulerToMatrix((np.random.randint(-20,20),np.random.randint(-20,20),np.random.randint(-20,20)))) # random rotation
                 p = p.transpose()
                 p = np.reshape(p, orig_shape)
-                occupancy_grid,label_grid,_,_,_,vol_occ = dl.load_binvox_np(p, data[5])
+                occupancy_grid,label_grid,_,_,_,vol_occ,sizes = dl.load_binvox_np(p, data[5])
 
                 occ.append(np.reshape(occupancy_grid, self.shape))
                 seg.append(label_grid)
                 pts.append(p)  
                 vol.append(np.reshape(vol_occ, self.shape))
+                siz.append(sizes)
 
                 # xs = []
                 # ys = []
@@ -246,6 +249,7 @@ class Parts(dataset_template):
                 seg.append(data[1])
                 pts.append(data[4])
                 vol.append(np.reshape(data[7], self.shape))
+                siz.append(data[8])
 
             cat.append(data[2])
             nam.append(data[3])
@@ -263,7 +267,7 @@ class Parts(dataset_template):
         if update:
             dataset[dataset_template.CURRENT_BATCH] += 1
 
-        return np.array(occ),np.array(seg),np.array(cat),np.array(nam),np.array(pts),np.array(lbs),np.array(acc), np.array(msk), np.array(pos_msk), np.array(vol)
+        return np.array(occ),np.array(seg),np.array(cat),np.array(nam),np.array(pts),np.array(lbs),np.array(acc), np.array(msk), np.array(pos_msk), np.array(vol), np.array(siz)
 
 
     def update_mini_batch(self, dataset, new_accs, alpha=0.05):
@@ -277,53 +281,6 @@ class Parts(dataset_template):
 
         dataset[dataset_template.CURRENT_BATCH] += 1
 
-
-    def next_mini_batch_augmented(self, dataset):
-        occ = []
-        seg = []
-        cat = []
-        nam = []
-        pts = []
-        lbs = []
-        wgs = []
-        start = dataset[dataset_template.CURRENT_BATCH] * self.batch_size
-        end = min(dataset[dataset_template.NUMBER_EXAMPLES], start + self.batch_size)
-
-        for data_idx in dataset[Parts.ORDER][start:end]:
-            data = dataset[dataset_template.DATASET][data_idx]
-
-            # append original
-            occ.append(data[0])
-            seg.append(data[1])
-            cat.append(data[2])
-            nam.append(data[3])
-            pts.append(data[4])
-            lbs.append(data[5])
-            wgs.append(data[6])
-            # add augmentation
-            scale_range = 3.5
-            per_point_noise_range = 2.0
-            for rot_iter in range(0,3):
-                p = np.copy(data[4])
-                orig_shape = data[4].shape
-                p = np.reshape(p, [3,-1])
-                p = convert.rotatePoints(p, convert.eulerToMatrix((np.random.randint(0,360),np.random.randint(0,360),np.random.randint(0,360)))) # random rotation
-                # p = p.transpose()
-                # p = p * (1.0 + scale_range * (np.array([np.random.randint(0,500),np.random.randint(0,500),np.random.randint(0,500)]) / 500.0 - 0.5) / 5.0) # random scale in range 1 +- scale_range*0.1
-                # p = p.transpose()
-                p = np.reshape(p, orig_shape)
-                occupancy_grid, label_grid, _, _, _ = dl.load_binvox_np(p, data[5])
-
-                occ.append(np.reshape(occupancy_grid, self.shape))
-                seg.append(label_grid)
-                cat.append(data[2])
-                nam.append(data[3])
-                pts.append(data[4])
-                lbs.append(data[5])
-                wgs.append(data[6])
-
-        dataset[dataset_template.CURRENT_BATCH] += 1
-        return np.array(occ),np.array(seg),np.array(cat),np.array(nam),np.array(pts),np.array(lbs),np.array(wgs)
 
 
     # @staticmethod

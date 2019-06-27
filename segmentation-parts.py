@@ -14,6 +14,7 @@ class PartsNet():
 
     def create_placeholders(self, n_y, n_seg):
         X = tf.placeholder(dtype=tf.float32, shape=(None,self.dataset.shape[0],self.dataset.shape[1],self.dataset.shape[2],1), name="input_grid")
+        sizes = tf.placeholder(dtype=tf.float32, shape=(None,3), name="point_cloud_sizes")
         X_vol = tf.placeholder(dtype=tf.float32, shape=(None,self.dataset.shape[0],self.dataset.shape[1],self.dataset.shape[2],1), name="input_grid_vol")
         weight = tf.placeholder(dtype=tf.float32, shape=(None), name="loss_weights")
         Y_seg = tf.placeholder(dtype=tf.int32, shape=(None), name="segmentation_labels")
@@ -22,7 +23,7 @@ class PartsNet():
         bn_training = tf.placeholder(dtype=tf.bool, name="batch_norm_training")
         pos_mask =  tf.placeholder(dtype=tf.float32, shape=(None, n_seg), name="loss_weights")
 
-        return X, Y_seg, Y_cat, keep_prob, bn_training, weight, pos_mask, X_vol
+        return X, Y_seg, Y_cat, keep_prob, bn_training, weight, pos_mask, X_vol,sizes
 
     
     def convolution(self, X, shape, strides=[1,1,1,1,1], padding="SAME", act=tf.nn.relu):
@@ -224,7 +225,7 @@ class PartsNet():
         return A_fv, A_class, U_mask, U_class
 
     
-    def forward_propagation(self, X, n_cat, n_seg, keep_prob, bn_training):
+    def forward_propagation(self, X, n_cat, n_seg, keep_prob, bn_training,sizes):
         self.layer_idx = 0
         # imagine that the net operates over 32x32x32 blocks
         # feature vector learning
@@ -274,7 +275,7 @@ class PartsNet():
         U_mask = tf.layers.batch_normalization(U_mask, training=bn_training) 
 
         # segmentation prediction      
-        U_mask = self.convolution(U_mask, [1,1,1,64,n_seg], padding="SAME", act=None)
+        U_mask = self.convolution(tf.concat([U_mask, np.reshape(sizes,[-1,1,1,1,3])]), [1,1,1,64+3,n_seg], padding="SAME", act=None)
         mask = self.convolution(D3, [1,1,1,512,256], padding="VALID", act=tf.nn.leaky_relu)
         mask = tf.nn.dropout(mask, keep_prob)
         mask = tf.layers.batch_normalization(mask, training=bn_training)
@@ -284,7 +285,7 @@ class PartsNet():
         mask = self.convolution(mask, [1,1,1,128,n_seg], padding="VALID", act=None)
         
         # category prediction
-        A4 = self.convolution(D3, [1,1,1,512,256], padding="VALID", act=tf.nn.leaky_relu)
+        A4 = self.convolution(tf.concat([D3, np.reshape(sizes,[-1,1,1,1,3])]), [1,1,1,512+3,256], padding="VALID", act=tf.nn.leaky_relu)
         A4 = tf.nn.dropout(A4, keep_prob)
         A4 = tf.layers.batch_normalization(A4, training=bn_training)
         seg_sum = tf.reduce_sum(U_mask, axis=3)
@@ -306,82 +307,6 @@ class PartsNet():
 
         return A_fv, A_class, U_mask, U_class, tf.reshape(mask, [-1,n_seg])
 
-
-    def forward_propagation_best(self, X, n_cat, n_seg, keep_prob, bn_training):
-        self.layer_idx = 0
-        # imagine that the net operates over 32x32x32 blocks
-        # feature vector learning
-        # IN 32
-        # first block
-        A0_5 = self.convolution(X, [5,5,5,1,32], padding="SAME") 
-        D0_5 = tf.nn.dropout(A0_5, keep_prob)
-        D0_5 = tf.layers.batch_normalization(D0_5, training=bn_training) 
-
-        A0_3 = self.convolution(X, [3,3,3,1,32], padding="SAME") 
-        D0_3 = tf.nn.dropout(A0_3, keep_prob)
-        D0_3 = tf.layers.batch_normalization(D0_3, training=bn_training) 
-        A0 = tf.concat([D0_3,D0_5], axis=-1)     
-        M0 = tf.nn.max_pool3d(A0, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 16
-
-        # second block
-        A1_5 = self.convolution(M0, [5,5,5,64,64], padding="SAME")
-        D1_5 = tf.nn.dropout(A1_5, keep_prob)        
-        D1_5 = tf.layers.batch_normalization(D1_5, training=bn_training) 
-
-        A1_3 = self.convolution(M0, [3,3,3,64,64], padding="SAME")
-        D1_3 = tf.nn.dropout(A1_3, keep_prob)        
-        D1_3 = tf.layers.batch_normalization(D1_3, training=bn_training)      
-        A1 = tf.concat([D1_3,D1_5], axis=-1)     
-        M1 = tf.nn.max_pool3d(A1, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 8
-
-        # third block
-        A2_5 = self.convolution(M1, [5,5,5,128,128], padding="SAME")
-        D2_5 = tf.nn.dropout(A2_5, keep_prob)        
-        D2_5 = tf.layers.batch_normalization(D2_5, training=bn_training) 
-
-        A2_3 = self.convolution(M1, [3,3,3,128,128], padding="SAME")
-        D2_3 = tf.nn.dropout(A2_3, keep_prob)        
-        D2_3 = tf.layers.batch_normalization(D2_3, training=bn_training)      
-        A2 = tf.concat([D2_3,D2_5], axis=-1)     
-        M2 = tf.nn.max_pool3d(A2, ksize=[1,2,2,2,1], strides=[1,2,2,2,1], padding="VALID") # to 4
-
-        A3 = self.convolution(M2, [4,4,4,256,512], padding="VALID") # to 1
-        D3 = tf.nn.dropout(A3, keep_prob)
-        D3 = tf.layers.batch_normalization(D3, training=bn_training)        
-        
-        # TODO try and remove the 3,3,3 conv and use reshape instead to large vector
-        A4 = self.convolution(D3, [1,1,1,512,256], padding="VALID")
-        A_cat = self.convolution(A4, [1,1,1,256,n_cat], padding="VALID", act=None)
-        A_fv = tf.reshape(A_cat, [-1, n_cat])
-        A_class = tf.argmax(tf.nn.softmax(A_fv), axis=-1)
-        print(A_class.shape)
-
-        # U0 = self.convolution(A4, [1,1,1,512,256], padding="VALID") #1x1x1x256
-        # TODO use A5 as input or A_cat
-        U_t = tf.tile(D3, [1,8,8,8,1])
-        U_concat = tf.concat([A2, U_t], axis=-1)
-        U1 = self.convolution(U_concat, [3,3,3,512+256,256], padding="SAME")
-        U1 = tf.layers.batch_normalization(U1, training=bn_training)        
-        U1 = self.convolution(U1, [3,3,3,256,256], padding="SAME")
-        U1 = tf.layers.batch_normalization(U1, training=bn_training)        
-        
-        U2 = tf.keras.layers.UpSampling3D([2,2,2])(U1) # to 16
-        U_concat1 = tf.concat([A1, U2], axis=-1)
-        U2 = self.convolution(U_concat1, [3,3,3,256+128,128], padding="SAME")
-        U2 = tf.layers.batch_normalization(U2, training=bn_training)        
-        U2 = self.convolution(U2, [3,3,3,128,128], padding="SAME")
-        U2 = tf.layers.batch_normalization(U2, training=bn_training)        
-
-        U3 = tf.keras.layers.UpSampling3D([2,2,2])(U2) # to 32
-        U_concat2 = tf.concat([A0, U3], axis=-1)
-        U_mask = self.convolution(U_concat2, [3,3,3,128+64,64], padding="SAME")
-        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)      
-        U_mask = self.convolution(U_mask, [3,3,3,64,64], padding="SAME")
-        U_mask = tf.layers.batch_normalization(U_mask, training=bn_training)   
-        U_mask = self.convolution(U_mask, [1,1,1,64,n_seg], padding="SAME", act=None)
-        U_class = tf.argmax(tf.nn.softmax(U_mask), axis=-1)
-
-        return A_fv, A_class, U_mask, U_class
 
 
     def compute_cost(self, U, Y_seg, X, A, Y_cat, n_seg, weights, pos_mask, res_mask):
@@ -435,10 +360,10 @@ class PartsNet():
         # get variables and placeholders
         step = tf.Variable(0, trainable=False, name="global_step")
         self.lr_dec = tf.maximum(1e-5, tf.train.exponential_decay(self.lr, step, self.decay_step, self.decay_rate, staircase=True))
-        X, Y_seg, Y_cat, keep_prob, bn_training, weight, pos_mask, X_vol = self.create_placeholders(n_cat, n_seg)
+        X, Y_seg, Y_cat, keep_prob, bn_training, weight, pos_mask, X_vol, sizes = self.create_placeholders(n_cat, n_seg)
         
         # get model
-        A_fv, A_class, U_mask, U_class, res_mask = self.forward_propagation(X_vol, n_cat, n_seg, keep_prob, bn_training)
+        A_fv, A_class, U_mask, U_class, res_mask = self.forward_propagation(X_vol, n_cat, n_seg, keep_prob, bn_training, sizes)
         U_vec = tf.nn.softmax(U_mask)
         cost,acc_op = self.compute_cost(U_mask, Y_seg, X, A_fv, Y_cat, n_seg, weight, pos_mask, res_mask)
 
@@ -469,9 +394,9 @@ class PartsNet():
             dataset.clear_segmentation(data_dict, in_memory=in_memory)
             for i in range(dataset.num_mini_batches(data_dict)):
                 stime = time.time()
-                occ,seg,cat,names,points,lbs,wgs,msk,pos_msk,vol = self.dataset.next_mini_batch(data_dict)
+                occ,seg,cat,names,points,lbs,wgs,msk,pos_msk,vol,siz = self.dataset.next_mini_batch(data_dict)
                 # deconvolved_images,d_cost = sess.run([U_class,cost], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: 1.0})
-                deconvolved_images,d_cost,pred_class,seg_vec,feat_vec = sess.run([U_class,cost,A_class,U_vec,U_mask], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: wgs, pos_mask: msk, X_vol: vol})
+                deconvolved_images,d_cost,pred_class,seg_vec,feat_vec = sess.run([U_class,cost,A_class,U_vec,U_mask], feed_dict={X: occ, Y_seg: seg, Y_cat: cat, keep_prob: 1.0, bn_training: False, weight: wgs, pos_mask: msk, X_vol: vol, sizes: siz})
 
                 # mask based on class prediction
                 if apply_mask:
@@ -564,10 +489,10 @@ class PartsNet():
                         #         cc = cc + d_cost
 
                         # always train on unscaled data
-                        occ,seg,cat,names,_,_,wgs,msk,pos_msk,vol = self.dataset.next_mini_batch(self.dataset.train,augment=augment)
-                        wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
-                        wgs = 1.0 - wgs # best results should have least priority
-                        summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs, pos_mask: msk, X_vol: vol})
+                        occ,seg,cat,names,_,_,wgs,msk,pos_msk,vol,siz = self.dataset.next_mini_batch(self.dataset.train,augment=augment)
+                        # wgs = (wgs - min_wgs) / (max_wgs - min_wgs) # normalize in range (0,1)
+                        # wgs = 1.0 - wgs # best results should have least priority
+                        summary,_,d_cost = sess.run([summary_op,train_op,cost], feed_dict={X: occ, Y_cat: cat, Y_seg: seg, keep_prob: self.keep_prob, bn_training: True, weight: wgs, pos_mask: msk, X_vol: vol, sizes: siz})
                         cc = cc + d_cost
                         print("\rBatch learning %05d/%d" % (i+1,batches),end="")
 

@@ -858,7 +858,7 @@ def load_binvox_np(pointcloud, labels, grid_size=32, visualize=False):
     # vol_occ = np.sqrt(np.square(xx) + np.square(yy) + np.square(zz)) / np.sqrt(3)
     # vol_occ[occupancy_grid == 1] = 1
 
-    return occupancy_grid, label_grid, 0, pointcloud, labels, vol_occ
+    return occupancy_grid, label_grid, 0, pointcloud, labels, vol_occ, np.array([size_x, size_y, size_z])
 
 
 def load_binvox(pts, sgs, grid_size=32, ogrid_size=32, label_start=0, visualize=False):
@@ -1044,7 +1044,7 @@ def load_binvox(pts, sgs, grid_size=32, ogrid_size=32, label_start=0, visualize=
     # vol_occ = np.sqrt(np.square(xx) + np.square(yy) + np.square(zz)) / np.sqrt(3)
     # vol_occ[occupancy_grid == 1] = 1
 
-    return occupancy_grid, label_grid, label_count, pointcloud, labels, vol_occ
+    return occupancy_grid, label_grid, label_count, pointcloud, labels, vol_occ, np.array([size_x, size_y, size_z])
 
 
 def load_binvox_8_grid(pts, sgs, grid_size=32, ogrid_size=32, label_start=0, visualize=False):
