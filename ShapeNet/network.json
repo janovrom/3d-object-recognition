@@ -1,0 +1,18 @@
+{
+    "params":
+    {
+        "learning_rate" : 0.0001,
+        "learning_rate_deconv" : 0.0001,
+        "num_epochs" : 50,
+        "l2_reg_weights" : 0.0001,
+        "l2_reg_biases" : 0.0001,
+        "decay_step" : 20000,
+        "decay_rate" : 0.75,
+        "min_prob" : 0.65,
+        "keep_prob" : 0.75,
+        "input_shape" : [32,32,32,1],
+        "output_shape" : [32,32,32],
+        "batch_size" : 16
+    }
+
+}
