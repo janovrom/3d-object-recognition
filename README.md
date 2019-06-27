@@ -4,7 +4,7 @@ Roman Janovský, David Sedláček and Jiří Žára
 <br/>
 Faculty of Electrical Engineering, Czech Technical University in Prague, Technicka 2, Praha 6, Czechia
 <br/>
-{janovrom, david.sedlacek, zara}@fel.cvut.cz
+roman.janovsky9@seznam.cz,{david.sedlacek, zara}@fel.cvut.cz
 </p>
 
 #### Keywords
